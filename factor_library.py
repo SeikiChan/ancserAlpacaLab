@@ -87,6 +87,69 @@ def trend_strength(close: pd.DataFrame, short: int = 20, long: int = 50) -> pd.D
     return (sma_short / sma_long) - 1
 
 
+def kdj_factor(close: pd.DataFrame, high: pd.DataFrame = None, low: pd.DataFrame = None,
+               period: int = 9, signal: int = 3) -> pd.DataFrame:
+    """
+    KDJ Stochastic J-Line Factor (from TradingView KDJMA indicator)
+    
+    Cross-sectional usage: J < 20 = oversold (buy signal), J > 80 = overbought (sell signal).
+    We return the *inverted* J-value (100 - J) so higher = more oversold = stronger buy signal.
+    This way z-score ranking naturally puts oversold stocks at the top.
+    
+    Params:
+        high: high price DataFrame (if None, approximates from close)
+        low: low price DataFrame (if None, approximates from close)
+        period: KDJ lookback period (default 9)
+        signal: smoothing period for K and D (default 3)
+    """
+    # If high/low not provided, approximate from close
+    if high is None:
+        high = close
+    if low is None:
+        low = close
+
+    hh = high.rolling(period, min_periods=period // 2).max()
+    ll = low.rolling(period, min_periods=period // 2).min()
+    
+    # RSV = raw stochastic value
+    denom = (hh - ll).replace(0, np.nan)
+    rsv = 100.0 * (close - ll) / denom
+    
+    # Smoothed K and D using Wilder-style (bcwsma): K = EMA(RSV, signal), D = EMA(K, signal)
+    k = rsv.ewm(span=signal, adjust=False).mean()
+    d = k.ewm(span=signal, adjust=False).mean()
+    j = 3 * k - 2 * d
+    
+    # Invert: high value = oversold = buy signal
+    return 100.0 - j
+
+
+def pmo_factor(close: pd.DataFrame, first_length: int = 100, second_length: int = 50,
+               signal_length: int = 10) -> pd.DataFrame:
+    """
+    Price Momentum Oscillator (from TradingView EMAPMO indicator)
+    
+    PMO = EMA(10 × EMA(ROC(close, 1), first_length), second_length)
+    
+    Cross-sectional usage: Higher PMO = stronger upward momentum.
+    PMO naturally works cross-sectionally: rank 500 stocks by their PMO value,
+    stocks with highest PMO have strongest price momentum.
+    
+    Params:
+        first_length: first smoothing period (default 100)
+        second_length: second smoothing period (default 50)
+        signal_length: signal line EMA period (default 10)
+    """
+    # 1-day rate of change
+    roc1 = close.pct_change(1) * 100  # ROC as percentage
+    
+    # Double-smoothed: EMA of (10 * EMA(ROC, first_length))
+    smooth1 = roc1.ewm(span=first_length, adjust=False).mean() * 10
+    pmo = smooth1.ewm(span=second_length, adjust=False).mean()
+    
+    return pmo
+
+
 def beta_factor(close: pd.DataFrame, benchmark: pd.Series, period: int = 60) -> pd.DataFrame:
     """
     Beta因子 (相对基准的系统性风险)

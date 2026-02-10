@@ -1,0 +1,178 @@
+{
+  "timestamp": "2026-02-09T23:04:06.496096",
+  "run_type": "rolling",
+  "config": {
+    "factors": {
+      "kdj": {
+        "enabled": true,
+        "weight": 0.3,
+        "period": 9,
+        "signal": 3
+      },
+      "momentum_12_1": {
+        "enabled": false,
+        "weight": 0,
+        "lookback": 252,
+        "skip": 21
+      },
+      "pmo": {
+        "enabled": true,
+        "weight": 0.7,
+        "first_length": 100,
+        "second_length": 50
+      },
+      "pullback_5d": {
+        "enabled": false,
+        "weight": 0,
+        "lookback": 5
+      },
+      "rsi": {
+        "enabled": false,
+        "weight": 0,
+        "period": 14
+      },
+      "trend_strength": {
+        "enabled": false,
+        "weight": 0,
+        "long": 50,
+        "short": 20
+      },
+      "volatility": {
+        "enabled": false,
+        "weight": 0,
+        "period": 20
+      },
+      "volume_surge": {
+        "enabled": false,
+        "weight": 0,
+        "period": 20
+      }
+    },
+    "rebalance": "weekly_mon",
+    "years": 5,
+    "top_n": 10,
+    "universe_mode": "sp500_nasdaq100",
+    "tickers": null
+  },
+  "stats": {
+    "2021.02 ~ 2022.02": {
+      "calmar": -0.9792,
+      "cagr": -0.3822,
+      "max_dd": -0.3903,
+      "sharpe": -1.2079,
+      "win_rate": 0.5099,
+      "final_value": 0.6188,
+      "years": 1.0
+    },
+    "2022.02 ~ 2023.02": {
+      "calmar": 0.2138,
+      "cagr": 0.045,
+      "max_dd": -0.2103,
+      "sharpe": 0.3567,
+      "win_rate": 0.506,
+      "final_value": 1.0448,
+      "years": 1.0
+    },
+    "2023.02 ~ 2024.02": {
+      "calmar": 2.7555,
+      "cagr": 0.5811,
+      "max_dd": -0.2109,
+      "sharpe": 1.9822,
+      "win_rate": 0.5458,
+      "final_value": 1.5786,
+      "years": 1.0
+    },
+    "2024.02 ~ 2025.02": {
+      "calmar": 4.2208,
+      "cagr": 1.0353,
+      "max_dd": -0.2453,
+      "sharpe": 2.0186,
+      "win_rate": 0.5582,
+      "final_value": 2.0186,
+      "years": 0.99
+    },
+    "2025.02 ~ 2026.02": {
+      "calmar": 3.6399,
+      "cagr": 0.6797,
+      "max_dd": -0.1867,
+      "sharpe": 1.826,
+      "win_rate": 0.56,
+      "final_value": 1.6696,
+      "years": 0.99
+    }
+  },
+  "equity_summary": {
+    "start_date": null,
+    "end_date": null,
+    "start_value": null,
+    "end_value": null,
+    "num_days": 0
+  },
+  "extra": {
+    "num_windows": 5,
+    "window_years": 1,
+    "total_years": 5,
+    "windows_summary": [
+      {
+        "label": "2021.02 ~ 2022.02",
+        "stats": {
+          "calmar": -0.9792,
+          "cagr": -0.3822,
+          "max_dd": -0.3903,
+          "sharpe": -1.2079,
+          "win_rate": 0.5099,
+          "final_value": 0.6188,
+          "years": 1.0
+        }
+      },
+      {
+        "label": "2022.02 ~ 2023.02",
+        "stats": {
+          "calmar": 0.2138,
+          "cagr": 0.045,
+          "max_dd": -0.2103,
+          "sharpe": 0.3567,
+          "win_rate": 0.506,
+          "final_value": 1.0448,
+          "years": 1.0
+        }
+      },
+      {
+        "label": "2023.02 ~ 2024.02",
+        "stats": {
+          "calmar": 2.7555,
+          "cagr": 0.5811,
+          "max_dd": -0.2109,
+          "sharpe": 1.9822,
+          "win_rate": 0.5458,
+          "final_value": 1.5786,
+          "years": 1.0
+        }
+      },
+      {
+        "label": "2024.02 ~ 2025.02",
+        "stats": {
+          "calmar": 4.2208,
+          "cagr": 1.0353,
+          "max_dd": -0.2453,
+          "sharpe": 2.0186,
+          "win_rate": 0.5582,
+          "final_value": 2.0186,
+          "years": 0.99
+        }
+      },
+      {
+        "label": "2025.02 ~ 2026.02",
+        "stats": {
+          "calmar": 3.6399,
+          "cagr": 0.6797,
+          "max_dd": -0.1867,
+          "sharpe": 1.826,
+          "win_rate": 0.56,
+          "final_value": 1.6696,
+          "years": 0.99
+        }
+      }
+    ]
+  }
+}

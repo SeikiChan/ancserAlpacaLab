@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import math
+import uuid
 import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -28,6 +29,7 @@ from factor_library import (
     FactorEngine, FactorAnalyzer,
     momentum_12_1, pullback_5d, rsi_factor,
     volatility_factor, volume_surge, trend_strength,
+    kdj_factor, pmo_factor,
     zscore_cross_sectional
 )
 
@@ -45,6 +47,9 @@ SAVED_DIR = Path(__file__).parent / 'saved_data'
 SAVED_DIR.mkdir(exist_ok=True)
 FACTORS_FILE = SAVED_DIR / 'factors.json'
 STRATEGIES_FILE = SAVED_DIR / 'strategies.json'
+
+BACKTEST_LOG_DIR = Path(__file__).parent / 'logs' / 'backtest'
+BACKTEST_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Factor metadata for the UI
 FACTOR_INFO = {
@@ -97,6 +102,24 @@ FACTOR_INFO = {
             'long': {'default': 50, 'min': 20, 'max': 252, 'step': 1, 'label': 'Long SMA'}
         },
         'default_weight': 0.0
+    },
+    'kdj': {
+        'name': 'KDJ (J-Line)',
+        'description': 'Stochastic J-line reversal — oversold stocks score higher (buy signal)',
+        'params': {
+            'period': {'default': 9, 'min': 3, 'max': 30, 'step': 1, 'label': 'KDJ Period'},
+            'signal': {'default': 3, 'min': 2, 'max': 10, 'step': 1, 'label': 'Signal Smoothing'}
+        },
+        'default_weight': 0.0
+    },
+    'pmo': {
+        'name': 'PMO',
+        'description': 'Price Momentum Oscillator — double-smoothed ROC, higher = stronger momentum',
+        'params': {
+            'first_length': {'default': 100, 'min': 20, 'max': 200, 'step': 5, 'label': '1st EMA Length'},
+            'second_length': {'default': 50, 'min': 10, 'max': 100, 'step': 5, 'label': '2nd EMA Length'}
+        },
+        'default_weight': 0.0
     }
 }
 
@@ -108,6 +131,8 @@ FACTOR_FUNCTIONS = {
     'volatility': volatility_factor,
     'volume_surge': volume_surge,
     'trend_strength': trend_strength,
+    'kdj': kdj_factor,
+    'pmo': pmo_factor,
 }
 
 # Rebalance frequency mapping
@@ -168,7 +193,11 @@ def _compute_stats(equity_series, returns_series):
     sharpe = float((returns_series.mean() / std) * math.sqrt(252)) if std > 0 else 0
     win_rate = float((returns_series > 0).mean())
 
+    # Calmar Ratio: CAGR / |MaxDD| — prefers high CAGR, penalizes large drawdowns
+    calmar = float(cagr / abs(max_dd)) if abs(max_dd) > 1e-8 else 0.0
+
     return {
+        'calmar': round(calmar, 4),
         'cagr': round(cagr, 4),
         'max_dd': round(max_dd, 4),
         'sharpe': round(sharpe, 4),
@@ -180,7 +209,8 @@ def _compute_stats(equity_series, returns_series):
 
 def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
                               tickers=None, universe_mode='sp500_nasdaq100',
-                              start_date=None, end_date=None):
+                              start_date=None, end_date=None,
+                              data_start_date=None):
     """
     Run a backtest using the provided factor configuration.
     Returns equity curves + stats.
@@ -213,9 +243,12 @@ def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
 
     logger.info(f"Universe: {len(universe)} symbols, mode: {universe_mode}, period: {start_date} to {end_date}")
 
+    # Use data_start_date for fetching (allows factor warm-up before actual backtest start)
+    fetch_start = data_start_date if data_start_date else start_date
+
     close_df, volume_df = dm.get_market_data(
         universe=universe,
-        start_date=start_date,
+        start_date=fetch_start,
         end_date=end_date,
         use_cache=True
     )
@@ -353,10 +386,19 @@ def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
         port_ret.loc[dt] = stock_ret - cost
         w_prev = w_tgt
 
+    # Trim to actual backtest window (exclude factor warm-up period)
+    if data_start_date and start_date:
+        actual_start = pd.Timestamp(start_date)
+        trim_mask = port_ret.index >= actual_start
+        port_ret = port_ret[trim_mask]
+
     # Build equity curves
     eq_strategy = (1 + port_ret).cumprod()
-    ret_spy = spy.pct_change().fillna(0) if spy is not None else pd.Series(0, index=dates)
-    ret_qqq = qqq.pct_change().fillna(0) if qqq is not None else pd.Series(0, index=dates)
+
+    # Also trim benchmarks to match
+    eq_dates = eq_strategy.index
+    ret_spy = spy.pct_change().fillna(0).reindex(eq_dates, fill_value=0) if spy is not None else pd.Series(0, index=eq_dates)
+    ret_qqq = qqq.pct_change().fillna(0).reindex(eq_dates, fill_value=0) if qqq is not None else pd.Series(0, index=eq_dates)
     eq_spy = (1 + ret_spy).cumprod()
     eq_qqq = (1 + ret_qqq).cumprod()
 
@@ -370,6 +412,49 @@ def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
             'qqq': _compute_stats(eq_qqq, ret_qqq),
         }
     }
+
+
+def _log_backtest(run_type, config_data, result, extra=None):
+    """Write a structured JSON log for every backtest run."""
+    try:
+        ts = datetime.now()
+        short_id = uuid.uuid4().hex[:8]
+        filename = f"backtest_{ts.strftime('%Y%m%d_%H%M%S')}_{short_id}.json"
+
+        # Summarise equity curve (don't dump full daily data)
+        strat_eq = result.get('strategy', {})
+        eq_dates = sorted(strat_eq.keys()) if strat_eq else []
+
+        log_entry = {
+            'timestamp': ts.isoformat(),
+            'run_type': run_type,
+            'config': {
+                'factors': config_data.get('factors', {}),
+                'rebalance': config_data.get('rebalance', ''),
+                'years': config_data.get('years', 0),
+                'top_n': config_data.get('top_n', 0),
+                'universe_mode': config_data.get('universe_mode', ''),
+                'tickers': config_data.get('tickers', None),
+            },
+            'stats': result.get('stats', {}),
+            'equity_summary': {
+                'start_date': eq_dates[0] if eq_dates else None,
+                'end_date': eq_dates[-1] if eq_dates else None,
+                'start_value': strat_eq.get(eq_dates[0]) if eq_dates else None,
+                'end_value': strat_eq.get(eq_dates[-1]) if eq_dates else None,
+                'num_days': len(eq_dates),
+            },
+        }
+        if extra:
+            log_entry['extra'] = extra
+
+        log_path = BACKTEST_LOG_DIR / filename
+        with open(log_path, 'w', encoding='utf-8') as f:
+            json.dump(log_entry, f, indent=2, ensure_ascii=False, default=str)
+
+        logger.info(f"Backtest log saved: {log_path}")
+    except Exception as e:
+        logger.warning(f"Failed to write backtest log: {e}")
 
 
 # ==========================================
@@ -411,6 +496,10 @@ def run_backtest():
             factor_config, rebalance_rule, years, top_n,
             tickers=tickers, universe_mode=universe_mode
         )
+
+        # Log the backtest run
+        _log_backtest('main', data, result)
+
         return jsonify({'status': 'ok', 'data': result})
 
     except Exception as e:
@@ -440,8 +529,13 @@ def run_rolling():
         windows = []
         now = datetime.now()
 
+        # Lookback buffer: extra data before each window so factors can warm up
+        # 378 calendar days ≈ 252 trading days * 1.5 for safety
+        lookback_buffer_days = 378
+
+        num_windows = total_years - window_years + 1
         logger.info(f"Rolling request: total_years={total_years}, window={window_years}yr, "
-                    f"generating {total_years - window_years + 1} windows")
+                    f"generating {num_windows} windows (with {lookback_buffer_days}d lookback buffer)")
 
         for start_year_offset in range(total_years - window_years, -1, -1):
             w_end_dt = now - timedelta(days=start_year_offset * 365)
@@ -449,12 +543,17 @@ def run_rolling():
             w_start = w_start_dt.strftime('%Y-%m-%d')
             w_end = w_end_dt.strftime('%Y-%m-%d')
 
+            # Fetch extra data before window start for factor warm-up
+            data_start_dt = w_start_dt - timedelta(days=lookback_buffer_days)
+            data_start = data_start_dt.strftime('%Y-%m-%d')
+
             try:
-                logger.info(f"  Rolling window: {w_start} to {w_end}")
+                logger.info(f"  Rolling window: {w_start} to {w_end} (data from {data_start})")
                 result = _run_backtest_with_config(
                     factor_config, rebalance_rule, window_years, top_n,
                     tickers=tickers, universe_mode=universe_mode,
-                    start_date=w_start, end_date=w_end
+                    start_date=w_start, end_date=w_end,
+                    data_start_date=data_start
                 )
                 # Normalize to start at 1.0
                 strat_data = result['strategy']
@@ -467,8 +566,13 @@ def run_rolling():
                 else:
                     normalized = strat_data
 
+                # Use month-level label: "2021.02-2022.02" for clarity
+                label = f"{w_start[:7]}-{w_end[:7]}".replace('-', '.', 1).replace('-', '.', 1)
+                # Simplify: "2021.02 ~ 2022.02"
+                label = f"{w_start_dt.strftime('%Y.%m')} ~ {w_end_dt.strftime('%Y.%m')}"
+
                 windows.append({
-                    'label': f"{w_start[:4]}-{w_end[:4]}",
+                    'label': label,
                     'start': w_start,
                     'end': w_end,
                     'equity': normalized,
@@ -477,6 +581,17 @@ def run_rolling():
             except Exception as e:
                 logger.warning(f"Rolling window {w_start}-{w_end} failed: {e}")
                 continue
+
+        # Log rolling backtest
+        _log_backtest('rolling', data, {
+            'stats': {w['label']: w['stats'] for w in windows},
+            'strategy': {},
+        }, extra={
+            'num_windows': len(windows),
+            'window_years': window_years,
+            'total_years': total_years,
+            'windows_summary': [{'label': w['label'], 'stats': w['stats']} for w in windows]
+        })
 
         return jsonify({'status': 'ok', 'windows': windows})
 

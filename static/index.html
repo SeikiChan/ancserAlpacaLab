@@ -1,16 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Factor Analysis Dashboard — AncserQuant</title>
-    <meta name="description" content="Interactive quant factor analysis, backtesting, and rolling window comparison dashboard">
+    <meta name="description"
+        content="Interactive quant factor analysis, backtesting, and rolling window comparison dashboard">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
     <!-- Header -->
     <header id="app-header">
@@ -116,26 +122,32 @@
                 <div class="stat-card strategy-card">
                     <div class="stat-label">Strategy</div>
                     <div class="stat-values">
+                        <div><span class="stat-key">Calmar</span> <span class="stat-val" id="statCalmar">—</span></div>
                         <div><span class="stat-key">CAGR</span> <span class="stat-val" id="statCAGR">—</span></div>
                         <div><span class="stat-key">MaxDD</span> <span class="stat-val" id="statMaxDD">—</span></div>
                         <div><span class="stat-key">Sharpe</span> <span class="stat-val" id="statSharpe">—</span></div>
-                        <div><span class="stat-key">WinRate</span> <span class="stat-val" id="statWinRate">—</span></div>
+                        <div><span class="stat-key">WinRate</span> <span class="stat-val" id="statWinRate">—</span>
+                        </div>
                     </div>
                 </div>
                 <div class="stat-card spy-card">
                     <div class="stat-label">SPY</div>
                     <div class="stat-values">
                         <div><span class="stat-key">CAGR</span> <span class="stat-val" id="statSPY_CAGR">—</span></div>
-                        <div><span class="stat-key">MaxDD</span> <span class="stat-val" id="statSPY_MaxDD">—</span></div>
-                        <div><span class="stat-key">Sharpe</span> <span class="stat-val" id="statSPY_Sharpe">—</span></div>
+                        <div><span class="stat-key">MaxDD</span> <span class="stat-val" id="statSPY_MaxDD">—</span>
+                        </div>
+                        <div><span class="stat-key">Sharpe</span> <span class="stat-val" id="statSPY_Sharpe">—</span>
+                        </div>
                     </div>
                 </div>
                 <div class="stat-card qqq-card">
                     <div class="stat-label">QQQ</div>
                     <div class="stat-values">
                         <div><span class="stat-key">CAGR</span> <span class="stat-val" id="statQQQ_CAGR">—</span></div>
-                        <div><span class="stat-key">MaxDD</span> <span class="stat-val" id="statQQQ_MaxDD">—</span></div>
-                        <div><span class="stat-key">Sharpe</span> <span class="stat-val" id="statQQQ_Sharpe">—</span></div>
+                        <div><span class="stat-key">MaxDD</span> <span class="stat-val" id="statQQQ_MaxDD">—</span>
+                        </div>
+                        <div><span class="stat-key">Sharpe</span> <span class="stat-val" id="statQQQ_Sharpe">—</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -172,6 +184,7 @@
                         <thead>
                             <tr>
                                 <th>Window</th>
+                                <th>Calmar</th>
                                 <th>CAGR</th>
                                 <th>Max DD</th>
                                 <th>Sharpe</th>
@@ -221,4 +234,5 @@
 
     <script src="/static/app.js"></script>
 </body>
+
 </html>

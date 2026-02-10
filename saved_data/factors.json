@@ -1,15 +1,27 @@
 {
-  "haha": {
+  "icefishball 50/50": {
     "config": {
+      "kdj": {
+        "enabled": true,
+        "weight": 0.5,
+        "period": 9,
+        "signal": 3
+      },
       "momentum_12_1": {
         "enabled": false,
-        "weight": 0.7,
+        "weight": 0,
         "lookback": 252,
         "skip": 21
       },
-      "pullback_5d": {
+      "pmo": {
         "enabled": true,
-        "weight": 0.3,
+        "weight": 0.5,
+        "first_length": 100,
+        "second_length": 50
+      },
+      "pullback_5d": {
+        "enabled": false,
+        "weight": 0,
         "lookback": 5
       },
       "rsi": {
@@ -34,6 +46,55 @@
         "period": 20
       }
     },
-    "saved_at": "2026-02-09T21:52:37.584990"
+    "saved_at": "2026-02-09T23:01:26.061407"
+  },
+  "動能PMO7/3": {
+    "config": {
+      "kdj": {
+        "enabled": false,
+        "weight": 0,
+        "period": 9,
+        "signal": 3
+      },
+      "momentum_12_1": {
+        "enabled": true,
+        "weight": 0.7,
+        "lookback": 252,
+        "skip": 21
+      },
+      "pmo": {
+        "enabled": true,
+        "weight": 0.3,
+        "first_length": 100,
+        "second_length": 50
+      },
+      "pullback_5d": {
+        "enabled": false,
+        "weight": 0,
+        "lookback": 13
+      },
+      "rsi": {
+        "enabled": false,
+        "weight": 0,
+        "period": 14
+      },
+      "trend_strength": {
+        "enabled": false,
+        "weight": 0,
+        "long": 50,
+        "short": 20
+      },
+      "volatility": {
+        "enabled": false,
+        "weight": 0,
+        "period": 20
+      },
+      "volume_surge": {
+        "enabled": false,
+        "weight": 0,
+        "period": 20
+      }
+    },
+    "saved_at": "2026-02-09T23:18:16.137761"
   }
 }

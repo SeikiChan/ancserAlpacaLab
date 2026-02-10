@@ -114,11 +114,13 @@ function renderFactorControls(info) {
         for (const [pKey, pInfo] of Object.entries(factor.params)) {
             paramsHTML += `
                 <div class="param-row">
-                    <label>${pInfo.label}</label>
+                    <label title="${pInfo.label}">${pInfo.label}</label>
                     <input type="range" id="param-${key}-${pKey}"
                         min="${pInfo.min}" max="${pInfo.max}" step="${pInfo.step}" value="${pInfo.default}"
-                        oninput="document.getElementById('paramVal-${key}-${pKey}').textContent=this.value;"/>
-                    <span class="weight-display" id="paramVal-${key}-${pKey}">${pInfo.default}</span>
+                        oninput="syncParamInput('${key}','${pKey}', this.value)"/>
+                    <input type="number" class="param-value-input" id="paramVal-${key}-${pKey}"
+                        value="${pInfo.default}" min="${pInfo.min}" max="${pInfo.max}" step="${pInfo.step}"
+                        onchange="syncParamSlider('${key}','${pKey}', this.value)"/>
                 </div>`;
         }
 
@@ -137,14 +139,26 @@ function renderFactorControls(info) {
                 <div class="weight-row">
                     <label>Weight</label>
                     <input type="range" id="weight-${key}"
-                        min="0" max="1" step="0.05" value="${factor.default_weight}"
-                        oninput="onWeightManualChange('${key}', this.value)" />
-                    <span class="weight-display" id="weightVal-${key}">${factor.default_weight.toFixed(2)}</span>
+                        min="0" max="1" step="0.01" value="${factor.default_weight}"
+                        oninput="onWeightSliderChange('${key}', this.value)" />
+                    <input type="number" class="weight-display" id="weightVal-${key}"
+                        value="${factor.default_weight.toFixed(2)}" min="0" max="1" step="0.01"
+                        onchange="onWeightInputChange('${key}', this.value)"/>
                 </div>
             </div>`;
 
         container.appendChild(card);
     }
+}
+
+/* Sync param slider → input box */
+function syncParamInput(factorKey, paramKey, val) {
+    document.getElementById(`paramVal-${factorKey}-${paramKey}`).value = val;
+}
+
+/* Sync param input box → slider */
+function syncParamSlider(factorKey, paramKey, val) {
+    document.getElementById(`param-${factorKey}-${paramKey}`).value = val;
 }
 
 function toggleFactor(key, enabled) {
@@ -153,12 +167,61 @@ function toggleFactor(key, enabled) {
     normalizeWeights();
 }
 
-function onWeightManualChange(key, value) {
-    document.getElementById(`weightVal-${key}`).textContent = parseFloat(value).toFixed(2);
+/* When weight SLIDER changes: update input, then auto-normalize others */
+function onWeightSliderChange(changedKey, value) {
+    const v = parseFloat(value);
+    document.getElementById(`weightVal-${changedKey}`).value = v.toFixed(2);
+    autoNormalizeOthers(changedKey, v);
+}
+
+/* When weight INPUT BOX changes: update slider, then auto-normalize others */
+function onWeightInputChange(changedKey, value) {
+    let v = Math.max(0, Math.min(1, parseFloat(value) || 0));
+    document.getElementById(`weight-${changedKey}`).value = v;
+    document.getElementById(`weightVal-${changedKey}`).value = v.toFixed(2);
+    autoNormalizeOthers(changedKey, v);
+}
+
+/**
+ * Auto-normalize: keep changedKey's weight fixed,
+ * proportionally adjust all OTHER enabled factors so total = 1.0
+ */
+function autoNormalizeOthers(changedKey, fixedValue) {
+    const others = [];
+    for (const key of Object.keys(factorInfo)) {
+        if (key === changedKey) continue;
+        const enableEl = document.getElementById(`enable-${key}`);
+        if (enableEl && enableEl.checked) {
+            const w = parseFloat(document.getElementById(`weight-${key}`).value) || 0;
+            others.push({ key, weight: w });
+        }
+    }
+
+    const remaining = Math.max(0, 1.0 - fixedValue);
+
+    if (others.length === 0) return;
+
+    const otherSum = others.reduce((s, o) => s + o.weight, 0);
+
+    for (const o of others) {
+        let newW;
+        if (otherSum > 1e-8) {
+            // Proportional redistribution
+            newW = (o.weight / otherSum) * remaining;
+        } else {
+            // All others were zero — equal split
+            newW = remaining / others.length;
+        }
+        newW = Math.round(newW * 100) / 100; // round to 0.01
+
+        document.getElementById(`weight-${o.key}`).value = newW;
+        document.getElementById(`weightVal-${o.key}`).value = newW.toFixed(2);
+    }
 }
 
 /**
  * Auto-normalize weights of all enabled factors to sum to 1.0
+ * Called when toggling a factor on/off — resets to equal weight.
  */
 function normalizeWeights() {
     const enabledFactors = [];
@@ -172,8 +235,7 @@ function normalizeWeights() {
 
     if (enabledFactors.length === 0) return;
 
-    // Equal weight for all enabled factors
-    const equalWeight = Math.round((1.0 / enabledFactors.length) * 20) / 20; // round to 0.05
+    const equalWeight = Math.round((1.0 / enabledFactors.length) * 100) / 100;
 
     for (const key of Object.keys(factorInfo)) {
         const enableEl = document.getElementById(`enable-${key}`);
@@ -183,10 +245,10 @@ function normalizeWeights() {
 
         if (enableEl.checked) {
             weightEl.value = equalWeight;
-            dispEl.textContent = equalWeight.toFixed(2);
+            dispEl.value = equalWeight.toFixed(2);
         } else {
             weightEl.value = 0;
-            dispEl.textContent = '0.00';
+            dispEl.value = '0.00';
         }
     }
 }
@@ -434,6 +496,9 @@ function renderRollingStats(windows) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="color: var(--text-primary); font-weight: 500;">${w.label}</td>
+            <td class="${(s.calmar || 0) >= 1 ? 'positive' : ''}" style="color: ${(s.calmar || 0) >= 1 ? 'var(--accent-green)' : 'var(--text-secondary)'}">
+                ${s.calmar?.toFixed(2) || '—'}
+            </td>
             <td class="${s.cagr >= 0 ? 'positive' : 'negative'}" style="color: ${s.cagr >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">
                 ${formatPct(s.cagr)}
             </td>
@@ -460,6 +525,7 @@ function renderStats(stats) {
     grid.style.display = 'grid';
 
     const s = stats.strategy || {};
+    setStatValue('statCalmar', s.calmar?.toFixed(2) || '—', s.calmar);
     setStatValue('statCAGR', formatPct(s.cagr), s.cagr);
     setStatValue('statMaxDD', formatPct(s.max_dd), s.max_dd);
     setStatValue('statSharpe', s.sharpe?.toFixed(2) || '—', s.sharpe);
