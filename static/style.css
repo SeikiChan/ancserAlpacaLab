@@ -82,7 +82,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 24px;
+    padding: 6px 24px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -98,14 +98,14 @@ body {
 }
 
 .logo-mark {
-    font-size: 1.8rem;
-    width: 42px;
-    height: 42px;
+    font-size: 1.4rem;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--gradient-primary);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     box-shadow: var(--shadow-glow);
 }
 
@@ -270,7 +270,8 @@ body {
 }
 
 .param-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 80px 1fr 56px;
     align-items: center;
     gap: 6px;
 }
@@ -278,21 +279,19 @@ body {
 .param-row label {
     font-size: 0.72rem;
     color: var(--text-secondary);
-    min-width: 55px;
-    max-width: 80px;
-    flex-shrink: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .param-row input[type="range"] {
-    flex: 1;
+    width: 100%;
     min-width: 0;
 }
 
 .weight-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 80px 1fr 56px;
     align-items: center;
     gap: 6px;
     padding-top: 6px;
@@ -304,8 +303,6 @@ body {
     font-size: 0.72rem;
     color: var(--accent-cyan);
     font-weight: 600;
-    min-width: 44px;
-    flex-shrink: 0;
 }
 
 .weight-display,

@@ -1,0 +1,93 @@
+{
+  "timestamp": "2026-02-11T01:09:33.657771",
+  "run_type": "main",
+  "config": {
+    "factors": {
+      "kdj": {
+        "enabled": false,
+        "weight": 0,
+        "period": 9,
+        "signal": 3
+      },
+      "momentum_12_1": {
+        "enabled": false,
+        "weight": 0,
+        "lookback": 252,
+        "skip": 21
+      },
+      "pmo": {
+        "enabled": false,
+        "weight": 0,
+        "first_length": 100,
+        "second_length": 50
+      },
+      "pullback_5d": {
+        "enabled": false,
+        "weight": 0,
+        "lookback": 5
+      },
+      "rsi": {
+        "enabled": false,
+        "weight": 0,
+        "period": 14
+      },
+      "trend_strength": {
+        "enabled": false,
+        "weight": 0,
+        "long": 50,
+        "short": 20
+      },
+      "volatility": {
+        "enabled": true,
+        "weight": 1,
+        "period": 20
+      },
+      "volume_surge": {
+        "enabled": false,
+        "weight": 0,
+        "period": 20
+      }
+    },
+    "rebalance": "weekly_fri",
+    "years": 5,
+    "top_n": 10,
+    "universe_mode": "sp500_nasdaq100",
+    "tickers": null
+  },
+  "stats": {
+    "strategy": {
+      "calmar": 0.9652,
+      "cagr": 0.2872,
+      "max_dd": -0.2976,
+      "sharpe": 1.0513,
+      "win_rate": 0.5231,
+      "final_value": 3.528,
+      "years": 4.99
+    },
+    "spy": {
+      "calmar": 0.5542,
+      "cagr": 0.1358,
+      "max_dd": -0.245,
+      "sharpe": 0.8343,
+      "win_rate": 0.5431,
+      "final_value": 1.8884,
+      "years": 4.99
+    },
+    "qqq": {
+      "calmar": 0.3812,
+      "cagr": 0.1339,
+      "max_dd": -0.3512,
+      "sharpe": 0.6709,
+      "win_rate": 0.5463,
+      "final_value": 1.8728,
+      "years": 4.99
+    }
+  },
+  "equity_summary": {
+    "start_date": "2021-02-12",
+    "end_date": "2026-02-10",
+    "start_value": 1.0,
+    "end_value": 3.528037,
+    "num_days": 1254
+  }
+}

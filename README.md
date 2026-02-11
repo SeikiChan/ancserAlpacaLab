@@ -1,327 +1,141 @@
-# 量化交易系统 - 快速开始
+# Ancser Alpaca Lab
 
-## 📁 项目结构
+Cross-sectional factor-based quantitative trading system with web dashboard.
 
-```
-Quant_Project_Root/
-│
-├── config.yaml              # 全局配置 (重要!)
-├── requirements.txt         # 依赖列表
-│
-├── data_manager.py          # 数据管理 (下载、缓存、清洗)
-├── factor_library.py        # 因子库 (计算、测试)
-├── backtest_engine.py       # 回测引擎
-├── alpaca_execute_fixed.py  # 实盘执行器
-│
-├── /data_cache              # 数据缓存目录 (自动创建)
-├── /logs                    # 日志目录 (自动创建)
-│
-└── .env                     # Alpaca API密钥 (需创建)
-```
+横截面因子量化交易系统，含网页仪表板。
 
 ---
 
-## 🚀 安装
-
-### 1. 安装依赖
+## Quick Start / 快速啟動
 
 ```bash
+# 1. Install dependencies / 安裝依賴
 pip install -r requirements.txt
-```
 
-### 2. 配置API密钥 (实盘交易需要)
+# 2. Create .env file with Alpaca API keys / 建立 .env 填入 Alpaca API 金鑰
+#    APCA_API_KEY_ID=your_key
+#    APCA_API_SECRET_KEY=your_secret
 
-创建 `.env` 文件:
+# 3. Launch dashboard / 啟動儀表板
+python web_server.py
 
-```bash
-APCA_API_KEY_ID=your_alpaca_key
-APCA_API_SECRET_KEY=your_alpaca_secret
+# 4. Open browser / 開啟瀏覽器
+#    http://localhost:5000
 ```
 
 ---
 
-## 🧪 快速测试 (Ctrl+F5)
+## File Structure / 檔案結構
 
-每个模块都可以独立测试!
-
-### 测试1: 数据获取
-
-```bash
-python data_manager.py
 ```
+ancserAlpacaLab/
+  config.yaml             Global config / 全域設定
+  .env                    Alpaca API keys / API 金鑰
+  requirements.txt        Dependencies / 依賴清單
 
-**输出**: 下载20个股票的数据，显示质量检查
+  web_server.py           Web dashboard server / 網頁儀表板伺服器
+  backtest_engine.py      Backtest engine / 回測引擎
+  factor_library.py       Factor library / 因子庫
+  data_manager.py         Data download & cache / 資料下載與快取
+  alpaca_execute.py       Live trading executor / 實盤執行器
 
-### 测试2: 因子计算
+  static/
+    index.html            Dashboard UI / 儀表板介面
+    app.js                Frontend logic / 前端邏輯
+    style.css             Styles / 樣式
 
-```bash
-python factor_library.py
+  data_cache/             Cached market data / 市場資料快取 (auto-created)
+  logs/                   Execution & backtest logs / 執行與回測日誌 (auto-created)
+    backtest/             Structured JSON logs per run / 每次回測的 JSON 日誌
+  saved_data/             Saved configurations / 已儲存設定
 ```
-
-**输出**: 计算动量、反转因子，显示IC分析
-
-### 测试3: 完整回测
-
-```bash
-python backtest_engine.py
-```
-
-**输出**: 运行2年回测，显示收益曲线和统计
 
 ---
 
-## 📊 运行完整回测
+## Factors / 因子說明
+
+Each factor computes a daily cross-sectional score for all stocks.
+
+每個因子每日為所有股票計算橫截面分數。
+
+Higher composite score = more likely to be selected into the portfolio.
+
+綜合分數越高，越可能被選入投資組合。
+
+### Built-in Factors / 內建因子
+
+| Factor | Default | Description |
+|--------|---------|-------------|
+| **Momentum 12-1** | lookback=252, skip=21 | 12-month return minus most recent 1-month return. Classic cross-sectional momentum. |
+|  |  | 12 個月報酬扣除最近 1 個月報酬，經典橫截面動量。 |
+| **Pullback 5D** | lookback=5 | 5-day reversal factor. Stocks that dropped more rank higher (mean reversion). |
+|  |  | 5 日反轉因子，跌幅越大排名越前（均值回歸）。 |
+| **RSI** | period=14 | Relative Strength Index (0-100). Can be used for oversold screening. |
+|  |  | 相對強弱指標（0-100），可用於超賣篩選。 |
+| **Volatility** | period=20 | Annualized return volatility. Lower volatility = more stable. |
+|  |  | 年化波動率，波動越低越穩定。 |
+| **Volume Surge** | period=20 | Current volume / 20-day average volume. Detects unusual volume. |
+|  |  | 當前成交量 / 20 日均量，偵測異常放量。 |
+| **Trend Strength** | short=20, long=50 | Short SMA / Long SMA - 1. Positive = uptrend. |
+|  |  | 短期均線 / 長期均線 - 1，正值代表上升趨勢。 |
+| **KDJ (J-Line)** | period=9, signal=3 | Stochastic J-line (inverted). Oversold stocks score higher. Derived from TradingView KDJMA. |
+|  |  | 隨機指標 J 線（反轉），超賣股票分數較高。源自 TradingView KDJMA。 |
+| **PMO** | first=100, second=50 | Price Momentum Oscillator. Double-smoothed ROC. Higher = stronger momentum. Derived from TradingView EMAPMO. |
+|  |  | 價格動量振盪器，雙重平滑 ROC，數值越高動量越強。源自 TradingView EMAPMO。 |
+| **Beta** | period=60 | Rolling beta vs SPY. Lower beta = less market risk. |
+|  |  | 相對 SPY 的滾動 Beta，Beta 越低市場風險越小。 |
+
+---
+
+## Dashboard Stats / 儀表板指標
+
+| Metric | Formula | Meaning |
+|--------|---------|---------|
+| Calmar | CAGR / abs(MaxDD) | Reward per unit of maximum pain / 每單位最大痛苦的報酬 |
+| CAGR | Annualized compound return | Compound annual growth rate / 年化複合成長率 |
+| MaxDD | Peak-to-trough decline | Largest drawdown / 最大回撤 |
+| Sharpe | Mean daily return / Std * sqrt(252) | Risk-adjusted return / 風險調整報酬 |
+| Win Rate | % of positive return days | Percentage of profitable days / 正報酬天數比例 |
+
+---
+
+## Live Trading / 實盤交易
+
+```bash
+# Dry run (no orders) / 模擬（不下單）
+python alpaca_execute.py --paper --dry-run
+
+# Paper trading / 模擬賬戶交易
+python alpaca_execute.py --paper
+
+# Force immediate execution / 強制立即執行
+python alpaca_execute.py --paper --force
+```
+
+---
+
+## Config Reference / 設定參考
+
+All settings are in `config.yaml`.
+
+所有設定在 `config.yaml` 中。
+
+Key sections: `data`, `universe`, `factors`, `portfolio`, `regime`, `costs`, `backtest`, `execution`.
+
+主要區塊：`data` 資料、`universe` 股票池、`factors` 因子、`portfolio` 組合、`regime` 趨勢開關、`costs` 成本、`backtest` 回測、`execution` 執行。
+
+---
+
+## Adding a New Factor / 新增因子
 
 ```python
-from backtest_engine import BacktestEngine
+# 1. Add function in factor_library.py / 在 factor_library.py 加入函式
+def my_factor(close: pd.DataFrame, param: int = 10) -> pd.DataFrame:
+    return close.rolling(param).std()
 
-# 初始化
-engine = BacktestEngine()
+# 2. Register in FACTOR_FUNCTIONS dict in web_server.py
+#    在 web_server.py 的 FACTOR_FUNCTIONS 字典中註冊
 
-# 运行回测 (最近10年)
-results = engine.run()
-
-# 查看结果
-print(results['stats'])
+# 3. Add FACTOR_INFO entry in web_server.py for dashboard UI
+#    在 web_server.py 的 FACTOR_INFO 加入描述以顯示在儀表板
 ```
-
----
-
-## 💰 实盘交易 (Alpaca)
-
-### 模拟账户测试
-
-```bash
-python alpaca_execute_fixed.py --paper --dry-run
-```
-
-### 实际执行 (每周五自动)
-
-```bash
-python alpaca_execute_fixed.py --paper
-```
-
-### 强制立即执行
-
-```bash
-python alpaca_execute_fixed.py --paper --force
-```
-
----
-
-## ⚙️ 配置修改
-
-所有配置都在 `config.yaml` 中:
-
-### 修改股票池
-
-```yaml
-universe:
-  mode: "sp500_nasdaq100"  # 或 "sp500" 或 "nasdaq100"
-```
-
-### 调整因子权重
-
-```yaml
-factors:
-  momentum:
-    weight: 0.70  # 动量因子权重
-  pullback:
-    weight: 0.30  # 反转因子权重
-```
-
-### 修改调仓频率
-
-```yaml
-portfolio:
-  rebalance: "W-FRI"  # W-FRI=每周五, D=每天, M=每月
-```
-
-### 添加防御资产
-
-```yaml
-regime:
-  defensive_allocation:
-    BIL: 0.60   # 60% 现金等价物
-    GLD: 0.30   # 30% 黄金
-    TLT: 0.10   # 10% 长期国债
-```
-
-### 启用止损/止盈
-
-```yaml
-portfolio:
-  stop_loss:
-    enabled: true
-    threshold: -0.08  # -8% 止损
-  
-  take_profit:
-    enabled: true
-    threshold: 0.20   # +20% 止盈
-```
-
----
-
-## 🔬 高级功能
-
-### 1. 滚动窗口测试 (检验因子稳定性)
-
-```python
-from factor_library import rolling_window_test
-from data_manager import DataManager
-
-dm = DataManager()
-universe = dm.get_universe_list()[:50]
-close, volume = dm.get_market_data(universe)
-
-# 每4年一个窗口，步进1年
-results = rolling_window_test(close, volume, window_years=4, step_years=1)
-```
-
-**输出**: 每个窗口的IC统计，检查因子是否持续有效
-
-### 2. 单因子IC分析
-
-```python
-from factor_library import FactorEngine, FactorAnalyzer
-
-engine = FactorEngine()
-analyzer = FactorAnalyzer()
-
-factors = engine.compute_all_factors(close, volume)
-returns = close.pct_change()
-
-# IC分析
-ic_df = analyzer.calculate_ic(factors['momentum_12_1'], returns)
-ic_stats = analyzer.ic_summary(ic_df)
-print(ic_stats)
-```
-
-### 3. 因子分组收益测试
-
-```python
-# 将股票按因子分5组，看收益差异
-quantile_rets = analyzer.factor_quantile_returns(
-    factor=factors['momentum_12_1'],
-    returns=returns,
-    quantiles=5,
-    periods=20
-)
-
-print(quantile_rets.mean())  # 各组平均收益
-```
-
----
-
-## 🛠️ 添加新因子
-
-### 步骤1: 在 `factor_library.py` 中添加函数
-
-```python
-def my_new_factor(close: pd.DataFrame, param: int = 10) -> pd.DataFrame:
-    """我的新因子"""
-    return close.rolling(param).std()  # 示例: 波动率
-```
-
-### 步骤2: 注册到因子引擎
-
-```python
-# 在 FactorEngine.FACTOR_REGISTRY 中添加
-'my_factor': my_new_factor,
-```
-
-### 步骤3: 在 config.yaml 中启用
-
-```yaml
-factors:
-  my_factor:
-    enabled: true
-    weight: 0.20
-    param: 10
-```
-
-### 步骤4: 测试
-
-```bash
-python factor_library.py
-```
-
----
-
-## 📈 性能优化建议
-
-1. **使用数据缓存**: `use_cache=True` (默认开启)
-2. **减少回测股票数**: 测试时用前50个股票
-3. **调整调仓频率**: 降低调仓频率减少计算
-4. **并行下载**: yfinance 默认启用多线程
-
----
-
-## ⚠️ 常见问题
-
-### Q: 数据下载失败?
-
-**A**: 检查网络连接，或使用VPN。也可切换到Alpaca数据源:
-
-```yaml
-data:
-  source: "alpaca"  # 替换 "yahoo"
-```
-
-### Q: 因子IC很低?
-
-**A**: 正常! 单因子IC通常在 0.02-0.05。组合后效果更好。
-
-### Q: 回测收益不稳定?
-
-**A**: 尝试:
-1. 增加持仓数量 (`top_n: 50`)
-2. 延长最短持有期 (`min_hold_days: 20`)
-3. 启用趋势过滤 (`trend_gate: true`)
-
-### Q: 实盘执行出错?
-
-**A**: 检查:
-1. API密钥是否正确
-2. 是否在交易时间
-3. 账户余额是否足够
-4. 先用 `--dry-run` 测试
-
----
-
-## 📝 文件说明
-
-| 文件 | 功能 | 可独立运行 |
-|------|------|-----------|
-| `config.yaml` | 全局配置 | ❌ |
-| `data_manager.py` | 数据获取与缓存 | ✅ |
-| `factor_library.py` | 因子计算与分析 | ✅ |
-| `backtest_engine.py` | 完整回测系统 | ✅ |
-| `alpaca_execute_fixed.py` | 实盘执行 | ✅ |
-
----
-
-## 🎯 下一步
-
-1. **调整配置**: 修改 `config.yaml` 中的参数
-2. **添加因子**: 在 `factor_library.py` 中实现新因子
-3. **优化策略**: 通过滚动窗口测试找到最佳参数
-4. **模拟交易**: 用 `--paper` 模式运行一段时间
-5. **实盘部署**: 设置定时任务每周五自动执行
-
----
-
-## 💡 提示
-
-- **先测试后实盘**: 务必先用 `--dry-run` 验证逻辑
-- **小仓位开始**: 实盘初期使用较小的 `top_n`
-- **监控日志**: 检查 `logs/` 目录下的执行日志
-- **定期回测**: 每月运行一次完整回测检查策略表现
-
----
-
-## 📞 支持
-
-遇到问题? 检查日志文件或提issue。
-
-Happy Trading! 🚀
