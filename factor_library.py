@@ -17,9 +17,52 @@ logger = logging.getLogger(__name__)
 
 
 # ==========================================
-# 因子计算函数
+# Factor Registry (auto-discovery by web_server)
 # ==========================================
 
+FACTOR_REGISTRY = {}
+
+
+def register_factor(key, name, description, params, default_weight=0.0, data_source='close'):
+    """
+    Decorator: register a factor function with its UI metadata.
+    After decoration, the factor appears automatically in the web dashboard.
+
+    Args:
+        key:            unique identifier used in config / API
+        name:           display name in the UI
+        description:    short description shown under the name
+        params:         dict of {param_name: {default, min, max, step, label}}
+        default_weight: initial weight (0 = disabled by default)
+        data_source:    'close' or 'volume' — which DataFrame to pass
+    """
+    def decorator(func):
+        FACTOR_REGISTRY[key] = {
+            'func': func,
+            'name': name,
+            'description': description,
+            'params': params,
+            'default_weight': default_weight,
+            'data_source': data_source,
+        }
+        return func
+    return decorator
+
+
+# ==========================================
+# Factor Functions (decorated = auto-registered)
+# ==========================================
+
+@register_factor(
+    key='momentum_12_1',
+    name='Momentum 12-1',
+    description='12-month return minus most recent 1-month return',
+    params={
+        'lookback': {'default': 252, 'min': 20, 'max': 504, 'step': 1, 'label': 'Lookback (days)'},
+        'skip':     {'default': 21,  'min': 0,  'max': 63,  'step': 1, 'label': 'Skip Recent (days)'},
+    },
+    default_weight=0.70,
+)
 def momentum_12_1(close: pd.DataFrame, lookback: int = 252, skip: int = 21) -> pd.DataFrame:
     """
     12-1动量因子
@@ -34,6 +77,15 @@ def momentum_12_1(close: pd.DataFrame, lookback: int = 252, skip: int = 21) -> p
     return total_ret - recent_ret
 
 
+@register_factor(
+    key='pullback_5d',
+    name='Pullback 5D',
+    description='Short-term reversal factor (5-day pullback)',
+    params={
+        'lookback': {'default': 5, 'min': 1, 'max': 30, 'step': 1, 'label': 'Lookback (days)'},
+    },
+    default_weight=0.30,
+)
 def pullback_5d(close: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
     """
     短期反转因子 (5日回撤)
@@ -45,6 +97,14 @@ def pullback_5d(close: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
     return -close.pct_change(lookback)
 
 
+@register_factor(
+    key='rsi',
+    name='RSI',
+    description='Relative Strength Index (0-100, >70 overbought, <30 oversold)',
+    params={
+        'period': {'default': 14, 'min': 5, 'max': 50, 'step': 1, 'label': 'Period (days)'},
+    },
+)
 def rsi_factor(close: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     """
     RSI (相对强弱指标)
@@ -59,6 +119,14 @@ def rsi_factor(close: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     return rsi
 
 
+@register_factor(
+    key='volatility',
+    name='Volatility',
+    description='Annualized volatility — lower is more stable',
+    params={
+        'period': {'default': 20, 'min': 5, 'max': 60, 'step': 1, 'label': 'Period (days)'},
+    },
+)
 def volatility_factor(close: pd.DataFrame, period: int = 20) -> pd.DataFrame:
     """
     波动率因子
@@ -68,6 +136,15 @@ def volatility_factor(close: pd.DataFrame, period: int = 20) -> pd.DataFrame:
     return returns.rolling(period).std() * np.sqrt(252)
 
 
+@register_factor(
+    key='volume_surge',
+    name='Volume Surge',
+    description='Current volume / average volume ratio',
+    params={
+        'period': {'default': 20, 'min': 5, 'max': 60, 'step': 1, 'label': 'Period (days)'},
+    },
+    data_source='volume',
+)
 def volume_surge(volume: pd.DataFrame, period: int = 20) -> pd.DataFrame:
     """
     成交量激增因子
@@ -77,6 +154,15 @@ def volume_surge(volume: pd.DataFrame, period: int = 20) -> pd.DataFrame:
     return volume / avg_vol
 
 
+@register_factor(
+    key='trend_strength',
+    name='Trend Strength',
+    description='Short SMA / Long SMA - 1 (dual moving average)',
+    params={
+        'short': {'default': 20, 'min': 5,  'max': 100, 'step': 1, 'label': 'Short SMA'},
+        'long':  {'default': 50, 'min': 20, 'max': 252, 'step': 1, 'label': 'Long SMA'},
+    },
+)
 def trend_strength(close: pd.DataFrame, short: int = 20, long: int = 50) -> pd.DataFrame:
     """
     趋势强度 (双均线)
@@ -87,6 +173,15 @@ def trend_strength(close: pd.DataFrame, short: int = 20, long: int = 50) -> pd.D
     return (sma_short / sma_long) - 1
 
 
+@register_factor(
+    key='kdj',
+    name='KDJ (J-Line)',
+    description='Stochastic J-line reversal — oversold stocks score higher (buy signal)',
+    params={
+        'period': {'default': 9, 'min': 3,  'max': 30, 'step': 1, 'label': 'KDJ Period'},
+        'signal': {'default': 3, 'min': 2,  'max': 10, 'step': 1, 'label': 'Signal Smoothing'},
+    },
+)
 def kdj_factor(close: pd.DataFrame, high: pd.DataFrame = None, low: pd.DataFrame = None,
                period: int = 9, signal: int = 3) -> pd.DataFrame:
     """
@@ -124,6 +219,15 @@ def kdj_factor(close: pd.DataFrame, high: pd.DataFrame = None, low: pd.DataFrame
     return 100.0 - j
 
 
+@register_factor(
+    key='pmo',
+    name='PMO',
+    description='Price Momentum Oscillator — double-smoothed ROC, higher = stronger momentum',
+    params={
+        'first_length':  {'default': 100, 'min': 20, 'max': 200, 'step': 5, 'label': '1st EMA Length'},
+        'second_length': {'default': 50,  'min': 10, 'max': 100, 'step': 5, 'label': '2nd EMA Length'},
+    },
+)
 def pmo_factor(close: pd.DataFrame, first_length: int = 100, second_length: int = 50,
                signal_length: int = 10) -> pd.DataFrame:
     """
@@ -148,6 +252,108 @@ def pmo_factor(close: pd.DataFrame, first_length: int = 100, second_length: int 
     pmo = smooth1.ewm(span=second_length, adjust=False).mean()
     
     return pmo
+
+
+@register_factor(
+    key='graham',
+    name='Graham Value',
+    description='Benjamin Graham composite: Earnings Yield + Book-to-Market + Dividend Yield (fundamental)',
+    params={
+        'cache_days': {'default': 7, 'min': 1, 'max': 30, 'step': 1, 'label': 'Cache (days)'},
+    },
+)
+def graham_value_factor(close: pd.DataFrame, cache_days: int = 7) -> pd.DataFrame:
+    """
+    Benjamin Graham Value Factor (fundamental-based)
+    
+    Cross-sectional composite of:
+      - Earnings Yield (1 / P/E)  — higher = cheaper
+      - Book-to-Market (1 / P/B)  — higher = cheaper
+      - Dividend Yield             — higher = more income
+    
+    Higher composite score = more undervalued (stronger buy signal).
+    
+    Fundamentals are fetched from yfinance and cached to disk for cache_days
+    since they only change quarterly.
+    
+    NOTE: Uses current fundamentals for all dates (point-in-time).
+    Suitable for recent backtests; long historical backtests will have look-ahead bias.
+    
+    Params:
+        cache_days: days to keep cached fundamentals (default 7)
+    """
+    import yfinance as yf
+    import json as _json
+    from pathlib import Path
+    from datetime import datetime as _dt, timedelta as _td
+
+    tickers = list(close.columns)
+    cache_path = Path('data_cache') / 'graham_fundamentals.json'
+
+    # --- Load cache ---
+    fundamentals = {}
+    if cache_path.exists():
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                cached = _json.load(f)
+            cache_date = _dt.fromisoformat(cached.get('date', '2000-01-01'))
+            if _dt.now() - cache_date < _td(days=cache_days):
+                fundamentals = cached.get('data', {})
+        except Exception:
+            pass
+
+    # --- Fetch missing tickers ---
+    missing = [t for t in tickers if t not in fundamentals]
+    if missing:
+        logger.info(f"Graham factor: fetching fundamentals for {len(missing)} tickers...")
+        for t in missing:
+            try:
+                info = yf.Ticker(t).info
+                fundamentals[t] = {
+                    'trailingPE': info.get('trailingPE'),
+                    'priceToBook': info.get('priceToBook'),
+                    'dividendYield': info.get('dividendYield'),
+                    'trailingEps': info.get('trailingEps'),
+                    'bookValue': info.get('bookValue'),
+                }
+            except Exception as e:
+                logger.warning(f"Graham: failed to fetch {t}: {e}")
+                fundamentals[t] = {}
+
+        # Save cache
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                _json.dump({'date': _dt.now().isoformat(), 'data': fundamentals}, f,
+                           indent=2, ensure_ascii=False)
+            logger.info(f"Graham fundamentals cached to {cache_path}")
+        except Exception as e:
+            logger.warning(f"Graham: cache write failed: {e}")
+
+    # --- Compute composite value score per ticker ---
+    scores = {}
+    for t in tickers:
+        fund = fundamentals.get(t, {})
+        pe = fund.get('trailingPE')
+        pb = fund.get('priceToBook')
+        dy = fund.get('dividendYield')
+
+        # Earnings Yield = 1/PE (higher = cheaper)
+        ep = (1.0 / pe) if pe and pe > 0 else 0.0
+        # Book-to-Market = 1/PB (higher = cheaper)
+        bm = (1.0 / pb) if pb and pb > 0 else 0.0
+        # Dividend Yield (already higher = better)
+        div_y = dy if dy and dy > 0 else 0.0
+
+        # Equal-weight composite (all three normalised later by z-score)
+        scores[t] = ep + bm + div_y
+
+    # --- Broadcast static scores across all dates ---
+    score_df = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)
+    for t in tickers:
+        score_df[t] = scores.get(t, np.nan)
+
+    return score_df
 
 
 def beta_factor(close: pd.DataFrame, benchmark: pd.Series, period: int = 60) -> pd.DataFrame:

@@ -82,6 +82,8 @@ Higher composite score = more likely to be selected into the portfolio.
 |  |  | 隨機指標 J 線（反轉），超賣股票分數較高。源自 TradingView KDJMA。 |
 | **PMO** | first=100, second=50 | Price Momentum Oscillator. Double-smoothed ROC. Higher = stronger momentum. Derived from TradingView EMAPMO. |
 |  |  | 價格動量振盪器，雙重平滑 ROC，數值越高動量越強。源自 TradingView EMAPMO。 |
+| **Graham Value** | cache_days=7 | Benjamin Graham composite: Earnings Yield (1/PE) + Book-to-Market (1/PB) + Dividend Yield. Fundamental data via yfinance, cached to disk. |
+|  |  | 班傑明·葛拉漢價值因子：盈餘殖利率 (1/PE) + 帳面市值比 (1/PB) + 股息殖利率。基本面資料透過 yfinance 取得並快取。 |
 | **Beta** | period=60 | Rolling beta vs SPY. Lower beta = less market risk. |
 |  |  | 相對 SPY 的滾動 Beta，Beta 越低市場風險越小。 |
 

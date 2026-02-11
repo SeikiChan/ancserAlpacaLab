@@ -27,9 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data_manager import DataManager
 from factor_library import (
     FactorEngine, FactorAnalyzer,
-    momentum_12_1, pullback_5d, rsi_factor,
-    volatility_factor, volume_surge, trend_strength,
-    kdj_factor, pmo_factor,
+    FACTOR_REGISTRY,
     zscore_cross_sectional
 )
 
@@ -51,89 +49,12 @@ STRATEGIES_FILE = SAVED_DIR / 'strategies.json'
 BACKTEST_LOG_DIR = Path(__file__).parent / 'logs' / 'backtest'
 BACKTEST_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-# Factor metadata for the UI
+# --------------- auto-derived from factor_library decorators ---------------
 FACTOR_INFO = {
-    'momentum_12_1': {
-        'name': 'Momentum 12-1',
-        'description': '12-month return minus most recent 1-month return',
-        'params': {
-            'lookback': {'default': 252, 'min': 20, 'max': 504, 'step': 1, 'label': 'Lookback (days)'},
-            'skip': {'default': 21, 'min': 0, 'max': 63, 'step': 1, 'label': 'Skip Recent (days)'}
-        },
-        'default_weight': 0.70
-    },
-    'pullback_5d': {
-        'name': 'Pullback 5D',
-        'description': 'Short-term reversal factor (5-day pullback)',
-        'params': {
-            'lookback': {'default': 5, 'min': 1, 'max': 30, 'step': 1, 'label': 'Lookback (days)'}
-        },
-        'default_weight': 0.30
-    },
-    'rsi': {
-        'name': 'RSI',
-        'description': 'Relative Strength Index (0-100, >70 overbought, <30 oversold)',
-        'params': {
-            'period': {'default': 14, 'min': 5, 'max': 50, 'step': 1, 'label': 'Period (days)'}
-        },
-        'default_weight': 0.0
-    },
-    'volatility': {
-        'name': 'Volatility',
-        'description': 'Annualized volatility — lower is more stable',
-        'params': {
-            'period': {'default': 20, 'min': 5, 'max': 60, 'step': 1, 'label': 'Period (days)'}
-        },
-        'default_weight': 0.0
-    },
-    'volume_surge': {
-        'name': 'Volume Surge',
-        'description': 'Current volume / average volume ratio',
-        'params': {
-            'period': {'default': 20, 'min': 5, 'max': 60, 'step': 1, 'label': 'Period (days)'}
-        },
-        'default_weight': 0.0
-    },
-    'trend_strength': {
-        'name': 'Trend Strength',
-        'description': 'Short SMA / Long SMA - 1 (dual moving average)',
-        'params': {
-            'short': {'default': 20, 'min': 5, 'max': 100, 'step': 1, 'label': 'Short SMA'},
-            'long': {'default': 50, 'min': 20, 'max': 252, 'step': 1, 'label': 'Long SMA'}
-        },
-        'default_weight': 0.0
-    },
-    'kdj': {
-        'name': 'KDJ (J-Line)',
-        'description': 'Stochastic J-line reversal — oversold stocks score higher (buy signal)',
-        'params': {
-            'period': {'default': 9, 'min': 3, 'max': 30, 'step': 1, 'label': 'KDJ Period'},
-            'signal': {'default': 3, 'min': 2, 'max': 10, 'step': 1, 'label': 'Signal Smoothing'}
-        },
-        'default_weight': 0.0
-    },
-    'pmo': {
-        'name': 'PMO',
-        'description': 'Price Momentum Oscillator — double-smoothed ROC, higher = stronger momentum',
-        'params': {
-            'first_length': {'default': 100, 'min': 20, 'max': 200, 'step': 5, 'label': '1st EMA Length'},
-            'second_length': {'default': 50, 'min': 10, 'max': 100, 'step': 5, 'label': '2nd EMA Length'}
-        },
-        'default_weight': 0.0
-    }
+    k: {kk: vv for kk, vv in v.items() if kk not in ('func', 'data_source')}
+    for k, v in FACTOR_REGISTRY.items()
 }
-
-# Factor function mapping
-FACTOR_FUNCTIONS = {
-    'momentum_12_1': momentum_12_1,
-    'pullback_5d': pullback_5d,
-    'rsi': rsi_factor,
-    'volatility': volatility_factor,
-    'volume_surge': volume_surge,
-    'trend_strength': trend_strength,
-    'kdj': kdj_factor,
-    'pmo': pmo_factor,
-}
+FACTOR_FUNCTIONS = {k: v['func'] for k, v in FACTOR_REGISTRY.items()}
 
 # Rebalance frequency mapping
 REBALANCE_MAP = {
@@ -290,7 +211,8 @@ def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
         params = {k: v for k, v in fcfg.items() if k not in ('enabled', 'weight')}
         
         try:
-            if factor_name == 'volume_surge':
+            data_source = FACTOR_REGISTRY.get(factor_name, {}).get('data_source', 'close')
+            if data_source == 'volume':
                 factor_df = func(volume_stocks, **params)
             else:
                 factor_df = func(close_stocks, **params)
