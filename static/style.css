@@ -299,6 +299,11 @@ body {
     margin-top: 4px;
 }
 
+.weight-row input[type="range"] {
+    width: 100%;
+    min-width: 0;
+}
+
 .weight-row label {
     font-size: 0.72rem;
     color: var(--accent-cyan);

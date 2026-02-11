@@ -221,7 +221,8 @@ function autoNormalizeOthers(changedKey, fixedValue) {
 
 /**
  * Auto-normalize weights of all enabled factors to sum to 1.0
- * Called when toggling a factor on/off — resets to equal weight.
+ * Called when toggling a factor on/off — redistributes equally among enabled only.
+ * Disabled factors keep their weight untouched.
  */
 function normalizeWeights() {
     const enabledFactors = [];
@@ -237,19 +238,13 @@ function normalizeWeights() {
 
     const equalWeight = Math.round((1.0 / enabledFactors.length) * 100) / 100;
 
-    for (const key of Object.keys(factorInfo)) {
-        const enableEl = document.getElementById(`enable-${key}`);
+    for (const key of enabledFactors) {
         const weightEl = document.getElementById(`weight-${key}`);
         const dispEl = document.getElementById(`weightVal-${key}`);
-        if (!enableEl || !weightEl || !dispEl) continue;
+        if (!weightEl || !dispEl) continue;
 
-        if (enableEl.checked) {
-            weightEl.value = equalWeight;
-            dispEl.value = equalWeight.toFixed(2);
-        } else {
-            weightEl.value = 0;
-            dispEl.value = '0.00';
-        }
+        weightEl.value = equalWeight;
+        dispEl.value = equalWeight.toFixed(2);
     }
 }
 
