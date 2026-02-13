@@ -95,7 +95,79 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    width: 280px;
+    /* match sidebar width */
 }
+
+/* ==========================================
+   Liquid Glass Toggle
+   ========================================== */
+.glass-toggle-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.glass-toggle {
+    display: flex;
+    position: relative;
+    background: rgba(22, 27, 34, 0.6);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 4px;
+    gap: 4px;
+    backdrop-filter: blur(8px);
+}
+
+.glass-toggle input {
+    display: none;
+}
+
+.glass-toggle label {
+    position: relative;
+    z-index: 2;
+    padding: 6px 20px;
+    border-radius: 99px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.glass-toggle input:checked+label {
+    color: #fff;
+}
+
+.toggle-background {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    height: calc(100% - 8px);
+    width: 50%;
+    /* approximate, JS handles precise if needed but flex usually fine */
+    background: var(--gradient-primary);
+    border-radius: 99px;
+    z-index: 1;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(88, 166, 255, 0.4);
+    pointer-events: none;
+}
+
+/* Slider logic for pure CSS toggle */
+.glass-toggle input#tab-live:checked~.toggle-background {
+    transform: translateX(0);
+    width: 120px;
+}
+
+.glass-toggle input#tab-backtest:checked~.toggle-background {
+    transform: translateX(124px);
+    width: 120px;
+}
+
+
 
 .logo-mark {
     font-size: 1.4rem;
@@ -176,16 +248,210 @@ body {
    ========================================== */
 
 #app-main {
+    position: relative;
+    min-height: calc(100vh - 66px);
+}
+
+.view-section {
+    width: 100%;
+    height: 100%;
+}
+
+/* Backtest Layout (Old Main) */
+.backtest-layout {
     display: grid;
     grid-template-columns: 280px 1fr 260px;
     gap: 0;
     min-height: calc(100vh - 66px);
 }
 
-#content-center {
-    min-width: 0;
+/* Live Dashboard Layout */
+.live-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 24px;
+    padding: 24px;
+    height: calc(100vh - 66px - 300px);
+    /* Top area height */
+}
+
+.live-col-main {
+    display: flex;
+    flex-direction: column;
+}
+
+.live-col-side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.live-tables-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 24px;
+    padding: 0 24px 24px;
+}
+
+/* Live Charts */
+.chart-container-live {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.live-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.live-badge {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--accent-green);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    animation: livePulse 2s infinite;
+}
+
+@keyframes livePulse {
+    0% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+        text-shadow: 0 0 8px rgba(63, 185, 80, 0.5);
+    }
+
+    100% {
+        opacity: 0.6;
+    }
+}
+
+.chart-wrapper-live {
+    flex: 1;
+    position: relative;
+    min-height: 300px;
+}
+
+/* Account Cards */
+.account-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    position: relative;
     overflow: hidden;
 }
+
+.account-card .card-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+}
+
+.account-card .card-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.account-card .card-sub {
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
+
+.equity-card {
+    background: linear-gradient(145deg, rgba(88, 166, 255, 0.05) 0%, rgba(13, 17, 23, 0) 100%);
+    border-color: rgba(88, 166, 255, 0.2);
+}
+
+.equity-card .card-value {
+    font-size: 1.8rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.strategy-info-card .strategy-display {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Tables */
+.table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    max-height: 300px;
+}
+
+.table-header h3 {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.table-responsive {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-tertiary);
+    z-index: 10;
+    padding: 8px 12px;
+    font-size: 0.7rem;
+    text-align: left;
+}
+
+.data-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.8rem;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-muted {
+    color: var(--text-muted);
+}
+
+.text-green {
+    color: var(--accent-green);
+}
+
+.text-red {
+    color: var(--accent-red);
+}
+
+
 
 /* ==========================================
    Sidebars
@@ -1181,4 +1447,227 @@ tr:hover td {
 
 .holding-row .return.negative {
     color: var(--accent-red);
+}
+
+/* ==========================================
+   Optimizer Page
+   ========================================== */
+
+.optimizer-main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px;
+}
+
+.opt-controls {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.opt-controls-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.opt-controls-row .control-group {
+    flex: 0 0 auto;
+}
+
+.opt-controls-row input[type="number"] {
+    width: 80px;
+}
+
+/* Progress Bar */
+
+.opt-progress {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    margin-bottom: 20px;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.progress-bar-track {
+    height: 10px;
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+    border-radius: 5px;
+    transition: width 0.4s ease;
+}
+
+/* Best Config Card */
+
+.opt-best {
+    margin-bottom: 20px;
+}
+
+.best-config-card {
+    background: var(--card-bg);
+    border: 1px solid var(--accent-cyan);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    box-shadow: 0 0 16px rgba(0, 212, 255, 0.1);
+}
+
+.best-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.best-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 70px;
+}
+
+.best-stat .label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.best-stat .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.best-stat .value.highlight {
+    color: var(--accent-cyan);
+    font-size: 1.2rem;
+}
+
+.best-stat .value.positive {
+    color: var(--accent-green);
+}
+
+.best-stat .value.negative {
+    color: var(--accent-red);
+}
+
+.best-factors {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.best-factors .label {
+    margin-right: 6px;
+}
+
+.factor-tag {
+    display: inline-block;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin: 2px 4px 2px 0;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+}
+
+.factor-tag b {
+    color: var(--accent-cyan);
+    margin-left: 4px;
+}
+
+/* Leaderboard Table */
+
+.opt-leaderboard {
+    margin-bottom: 24px;
+}
+
+.opt-leaderboard table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.opt-leaderboard th {
+    text-align: left;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+}
+
+.opt-leaderboard td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.opt-leaderboard .top-row td {
+    background: rgba(0, 212, 255, 0.04);
+    font-weight: 600;
+}
+
+.opt-leaderboard .mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.opt-leaderboard .bold {
+    font-weight: 700;
+}
+
+.opt-leaderboard .positive {
+    color: var(--accent-green);
+}
+
+.opt-leaderboard .negative {
+    color: var(--accent-red);
+}
+
+.opt-leaderboard .factors-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-mini {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-cyan);
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-mini:hover {
+    background: var(--border);
 }

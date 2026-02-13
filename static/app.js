@@ -70,12 +70,233 @@ const CHART_DEFAULTS = {
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Initial Setup
     loadFactors();
     loadSaved();
     setupUniverseMode();
     createLoadingOverlay();
     createToastContainer();
+
+    // Start Live Polling if on live tab
+    switchTab('live');
+
+    // Check for optimizer application
+    const applied = sessionStorage.getItem('optimizer_apply');
+    if (applied) {
+        try {
+            const strategy = JSON.parse(applied);
+            switchTab('backtest'); // Switch to backtest tab if applying optimizer
+            applyFullConfig(strategy);
+            sessionStorage.removeItem('optimizer_apply');
+            showToast('Applied optimizer configuration', 'success');
+            setTimeout(runBacktest, 500);
+        } catch (e) {
+            console.error('Failed to apply optimizer strategy', e);
+        }
+    }
 });
+
+// ==========================================
+// Tab Switching & Live Data
+// ==========================================
+
+function switchTab(tab) {
+    const liveView = document.getElementById('view-live');
+    const backtestView = document.getElementById('view-backtest');
+
+    // UI Toggles
+    if (tab === 'live') {
+        liveView.style.display = 'block';
+        backtestView.style.display = 'none';
+        document.getElementById('tab-live').checked = true; // sync radio
+        startLivePolling();
+    } else {
+        liveView.style.display = 'none';
+        backtestView.style.display = 'block';
+        document.getElementById('tab-backtest').checked = true; // sync radio
+        stopLivePolling();
+    }
+}
+
+function startLivePolling() {
+    if (livePollInterval) clearInterval(livePollInterval);
+    fetchLiveData(); // run once immediately
+    livePollInterval = setInterval(fetchLiveData, 15000); // Poll every 15s
+}
+
+function stopLivePolling() {
+    if (livePollInterval) clearInterval(livePollInterval);
+    livePollInterval = null;
+}
+
+async function fetchLiveData() {
+    try {
+        const [acctRes, posRes, ordRes, histRes, cfgRes] = await Promise.all([
+            fetch('/api/alpaca/account'),
+            fetch('/api/alpaca/positions'),
+            fetch('/api/alpaca/orders'),
+            fetch('/api/alpaca/history'),
+            fetch('/api/config/current')
+        ]);
+
+        const acct = await acctRes.json();
+        const positions = await posRes.json();
+        const orders = await ordRes.json();
+        const history = await histRes.json();
+        const config = await cfgRes.json();
+
+        updateAccountCards(acct);
+        updatePositionsTable(positions);
+        updateOrdersTable(orders);
+        updateLiveChart(history);
+        updateActiveStrategy(config);
+
+        setStatus('ready', 'Connected to Alpaca');
+    } catch (e) {
+        console.error("Live poll failed", e);
+        setStatus('error', 'Connection Error');
+    }
+}
+
+function updateAccountCards(acct) {
+    if (acct.error) return;
+
+    document.getElementById('valEquity').textContent = formatCurrency(acct.equity);
+    document.getElementById('valCash').textContent = formatCurrency(acct.cash);
+    document.getElementById('valBuyingPower').textContent = formatCurrency(acct.buying_power);
+
+    // Calculate Day Change (Approximate if not provided directly, or fetch from history)
+    // Here we can use equity - last_equity if we had it, but Alpaca account obj doesn't always strictly give daily P/L directly in this endpoint easily without calc
+    // But we can check portfolio history or verify if 'equity' changed. 
+    // Actually, for simple display, let's just show equity.
+}
+
+function updatePositionsTable(positions) {
+    if (positions.error) return;
+    const body = document.getElementById('positionsBody');
+    body.innerHTML = '';
+
+    if (positions.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No open positions</td></tr>';
+        return;
+    }
+
+    positions.forEach(p => {
+        const pl = p.unrealized_pl;
+        const plpc = p.unrealized_plpc * 100;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="font-weight:600">${p.symbol}</td>
+            <td>${p.qty.toFixed(2)}</td>
+            <td>${p.avg_entry_price.toFixed(2)}</td>
+            <td>${p.current_price.toFixed(2)}</td>
+            <td>${formatCurrency(p.market_value)}</td>
+            <td class="${pl >= 0 ? 'text-green' : 'text-red'}">${formatCurrency(pl)}</td>
+            <td class="${plpc >= 0 ? 'text-green' : 'text-red'}">${plpc.toFixed(2)}%</td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+function updateOrdersTable(orders) {
+    if (orders.error) return;
+    const body = document.getElementById('ordersBody');
+    body.innerHTML = '';
+
+    // Combine open and closed, sort by time desc
+    const all = [...(orders.open || []), ...(orders.closed || [])];
+    all.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const show = all.slice(0, 10); // Show last 10
+
+    if (show.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No recent orders</td></tr>';
+        return;
+    }
+
+    show.forEach(o => {
+        const date = new Date(o.created_at).toLocaleTimeString();
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="font-weight:600">${o.symbol}</td>
+            <td class="${o.side === 'buy' ? 'text-green' : 'text-red'}" style="text-transform:uppercase">${o.side}</td>
+            <td>${o.qty}</td>
+            <td style="font-size:0.75rem">${o.status}</td>
+            <td style="color:var(--text-muted)">${date}</td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+function updateActiveStrategy(cfg) {
+    if (cfg.error) return;
+    const div = document.getElementById('activeStrategyDisplay');
+
+    let html = '';
+    // Factors
+    const enabledFactors = [];
+    if (cfg.factors) {
+        for (const [k, v] of Object.entries(cfg.factors)) {
+            if (v.enabled) {
+                enabledFactors.push(`${k} (${v.weight.toFixed(2)})`);
+            }
+        }
+    }
+
+    html += `<div><strong>Factors:</strong> ${enabledFactors.join(', ') || 'None'}</div>`;
+    html += `<div><strong>Top N:</strong> ${cfg.portfolio?.top_n || 10}</div>`;
+
+    div.innerHTML = html;
+}
+
+function updateLiveChart(hist) {
+    if (hist.error || !hist.timestamp) return;
+
+    const ctx = document.getElementById('liveEquityChart').getContext('2d');
+
+    const dataPoints = hist.timestamp.map((t, i) => ({
+        x: t * 1000, // alpaca usually returns seconds for some fields, check this
+        y: hist.equity[i]
+    }));
+
+    if (liveEquityChart) {
+        liveEquityChart.data.datasets[0].data = dataPoints;
+        liveEquityChart.update();
+    } else {
+        liveEquityChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Equity',
+                    data: dataPoints,
+                    borderColor: '#3fb950',
+                    backgroundColor: 'rgba(63, 185, 80, 0.1)',
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                ...CHART_DEFAULTS,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'day' },
+                        grid: { display: false }
+                    },
+                    y: {
+                        position: 'right',
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function formatCurrency(val) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+}
+
 
 async function loadFactors() {
     try {
@@ -285,7 +506,8 @@ function gatherFullConfig() {
         top_n: parseInt(document.getElementById('topN').value),
         tickers: tickers,
         universe_mode: universeMode,
-        rolling_window: parseInt(document.getElementById('rollingWindow').value)
+        rolling_window: parseInt(document.getElementById('rollingWindow').value),
+        enable_mwu: document.getElementById('enableMWU').checked
     };
 }
 
@@ -722,6 +944,9 @@ function applyFullConfig(strategy) {
     }
     if (strategy.tickers) {
         document.getElementById('customTickers').value = strategy.tickers;
+    }
+    if (strategy.enable_mwu !== undefined) {
+        document.getElementById('enableMWU').checked = strategy.enable_mwu;
     }
 }
 

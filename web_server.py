@@ -25,11 +25,17 @@ from flask import Flask, request, jsonify, send_from_directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from data_manager import DataManager
-from factor_library import (
-    FactorEngine, FactorAnalyzer,
-    FACTOR_REGISTRY,
-    zscore_cross_sectional
-)
+from factor_library import FactorEngine, zscore_cross_sectional, FACTOR_REGISTRY
+from mwu_engine import MWUEngine
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import GetOrdersRequest
+from alpaca.trading.enums import OrderSide, QueryOrderStatus
+from alpaca.data.historical import StockHistoricalDataClient
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from factor_optimizer import FactorOptimizer
 
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -40,6 +46,18 @@ logger = logging.getLogger(__name__)
 # ==========================================
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+# Initialize Alpaca Clients
+API_KEY = os.getenv("APCA_API_KEY_ID")
+SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
+PAPER = True  # Default to paper, can be made configurable
+
+trading_client = None
+if API_KEY and SECRET_KEY:
+    try:
+        trading_client = TradingClient(API_KEY, SECRET_KEY, paper=PAPER)
+        logger.info("Alpaca Trading Client initialized")
+    except Exception as e:
+        logger.error(f"Failed to init Alpaca Client: {e}")
 
 SAVED_DIR = Path(__file__).parent / 'saved_data'
 SAVED_DIR.mkdir(exist_ok=True)
@@ -131,7 +149,7 @@ def _compute_stats(equity_series, returns_series):
 def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
                               tickers=None, universe_mode='sp500_nasdaq100',
                               start_date=None, end_date=None,
-                              data_start_date=None):
+                              data_start_date=None, enable_mwu=False):
     """
     Run a backtest using the provided factor configuration.
     Returns equity curves + stats.
@@ -227,10 +245,101 @@ def _run_backtest_with_config(factor_config, rebalance_rule, years, top_n,
     sample_df = list(factors.values())[0][0]
     score = pd.DataFrame(0.0, index=sample_df.index, columns=sample_df.columns)
 
-    for fname, (fdf, w) in factors.items():
-        norm = zscore_cross_sectional(fdf)
-        norm = norm.reindex(index=score.index, columns=score.columns).fillna(0)
-        score += (w / total_weight) * norm
+    if enable_mwu and len(factors) > 1:
+        logger.info("MWU Backtest: Calculating dynamic weights...")
+        try:
+            # 1. Calculate Factor Returns
+            # We need to see how each factor performs period-over-period
+            # We'll use weekly returns for stability
+            factor_names = list(factors.keys())
+            common_idx = sample_df.index
+            
+            # Resample prices to weekly (Friday)
+            wk_close = close_stocks.resample('W-FRI').last()
+            wk_ret = wk_close.pct_change()
+            
+            # Align factors to weekly
+            wk_factors = {}
+            for fname, (fdf, _) in factors.items():
+                wk_factors[fname] = fdf.reindex(wk_close.index).ffill()
+                
+            # Compute factor returns history
+            factor_ret_history = []
+            valid_wk_dates = wk_close.index
+            
+            for i in range(1, len(valid_wk_dates)):
+                dt = valid_wk_dates[i]
+                prev_dt = valid_wk_dates[i-1]
+                
+                # Returns from prev to curr
+                period_ret_stk = wk_ret.loc[dt]
+                
+                period_f_rets = {}
+                for fname in factor_names:
+                    # Pick top N stocks based on factor at prev_dt
+                    f_vals = wk_factors[fname].loc[prev_dt]
+                    valid = f_vals.dropna().sort_values(ascending=False)
+                    picks = valid.head(top_n).index
+                    
+                    if len(picks) > 0:
+                        # Avg return of these picks
+                        r = period_ret_stk[picks].mean()
+                        period_f_rets[fname] = r if not pd.isna(r) else 0.0
+                    else:
+                        period_f_rets[fname] = 0.0
+                        
+                factor_ret_history.append(period_f_rets)
+                
+            # DF of Factor Returns
+            f_ret_df = pd.DataFrame(factor_ret_history, index=valid_wk_dates[1:])
+            
+            # Scale returns for MWU (since weekly returns are small)
+            f_ret_df_scaled = f_ret_df * 5.0
+            
+            # 2. Run MWU
+            mwu = MWUEngine(factor_names, learning_rate=0.1)
+            # weights_df has index of dates where weights are APPLICABLE
+            # run_simulation returns weights at T based on info < T.
+            # So weights at T are ready to be used for trading at T.
+            weights_df = mwu.run_simulation(f_ret_df_scaled)
+            
+            # 3. Compute Dynamic Composite Score
+            # Reindex weights to daily
+            daily_weights = weights_df.reindex(score.index).ffill().fillna(1.0/len(factor_names))
+            
+            # ZScore all factors once
+            zscored_factors = {}
+            for fname, (fdf, _) in factors.items():
+                zscored_factors[fname] = zscore_cross_sectional(fdf).reindex(index=score.index, columns=score.columns).fillna(0)
+                
+            # Weighted sum
+            for fname in factor_names:
+                w_series = daily_weights[fname] # Series of weights over time
+                # Expand w_series to match DataFrame shape for broadcasting
+                # w_df = pd.DataFrame(np.outer(w_series.values, np.ones(score.shape[1])), index=score.index, columns=score.columns)
+                # Pandas broadcasting works column-wise by default, we need row-wise
+                # Multiply term: factor_matrix * weight_vector (elementwise along time)
+                term = zscored_factors[fname].multiply(w_series, axis=0)
+                score += term
+                
+        except Exception as e:
+            logger.error(f"MWU Backtest Logic Failed: {e}")
+            logger.info("Falling back to static weights")
+            enable_mwu = False # invalidates the flag to fall through to static logic logic if we could, 
+                               # but we already initialized score.
+            # Fallback static calc
+            score = pd.DataFrame(0.0, index=sample_df.index, columns=sample_df.columns)
+            for fname, (fdf, w) in factors.items():
+                norm = zscore_cross_sectional(fdf)
+                norm = norm.reindex(index=score.index, columns=score.columns).fillna(0)
+                score += (w / total_weight) * norm
+
+    else:
+        # Static Weights (Original Logic)
+        for fname, (fdf, w) in factors.items():
+            norm = zscore_cross_sectional(fdf)
+            norm = norm.reindex(index=score.index, columns=score.columns).fillna(0)
+            score += (w / total_weight) * norm
 
     # Filters
     filter_cfg = config['filters']
@@ -507,6 +616,115 @@ def get_factors():
     return jsonify(FACTOR_INFO)
 
 
+@app.route('/api/alpaca/account', methods=['GET'])
+def get_alpaca_account():
+    if not trading_client:
+        return jsonify({'error': 'Alpaca client not initialized'}), 503
+    try:
+        acct = trading_client.get_account()
+        return jsonify({
+            'equity': float(acct.equity),
+            'cash': float(acct.cash),
+            'buying_power': float(acct.buying_power),
+            'day_trade_count': int(acct.daytrade_count),
+            'status': acct.status,
+            'currency': acct.currency
+        })
+    except Exception as e:
+        logger.error(f"Alpaca Account Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alpaca/positions', methods=['GET'])
+def get_alpaca_positions():
+    if not trading_client:
+        return jsonify({'error': 'Alpaca client not initialized'}), 503
+    try:
+        positions = trading_client.get_all_positions()
+        res = []
+        for p in positions:
+            res.append({
+                'symbol': p.symbol,
+                'qty': float(p.qty),
+                'market_value': float(p.market_value),
+                'current_price': float(p.current_price),
+                'avg_entry_price': float(p.avg_entry_price),
+                'unrealized_pl': float(p.unrealized_pl),
+                'unrealized_plpc': float(p.unrealized_plpc),
+                'change_today': float(p.change_today)
+            })
+        return jsonify(res)
+    except Exception as e:
+        logger.error(f"Alpaca Positions Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alpaca/orders', methods=['GET'])
+def get_alpaca_orders():
+    if not trading_client:
+        return jsonify({'error': 'Alpaca client not initialized'}), 503
+    try:
+        # Get open orders
+        req = GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=50)
+        orders = trading_client.get_orders(filter=req)
+        
+        # Get closed orders (recent)
+        req_closed = GetOrdersRequest(status=QueryOrderStatus.CLOSED, limit=20)
+        closed_orders = trading_client.get_orders(filter=req_closed)
+        
+        def fmt_order(o):
+            return {
+                'id': str(o.id),
+                'symbol': o.symbol,
+                'qty': float(o.qty) if o.qty else 0,
+                'notional': float(o.notional) if o.notional else 0,
+                'side': o.side,
+                'type': o.type,
+                'time_in_force': o.time_in_force,
+                'status': o.status,
+                'created_at': o.created_at.isoformat(),
+                'filled_avg_price': float(o.filled_avg_price) if o.filled_avg_price else None
+            }
+            
+        return jsonify({
+            'open': [fmt_order(o) for o in orders],
+            'closed': [fmt_order(o) for o in closed_orders]
+        })
+    except Exception as e:
+        logger.error(f"Alpaca Orders Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alpaca/history', methods=['GET'])
+def get_alpaca_history():
+    if not trading_client:
+        return jsonify({'error': 'Alpaca client not initialized'}), 503
+    try:
+        # Get portfolio history (1M default)
+        # Note: In a real app we might want more options
+        hist = trading_client.get_portfolio_history(period="1M", timeframe="1D")
+        
+        # Format for Chart.js
+        return jsonify({
+            'timestamp': hist.timestamp, # list of unix timestamps
+            'equity': hist.equity,       # list of equity values
+            'profit_loss': hist.profit_loss,
+            'profit_loss_pct': hist.profit_loss_pct
+        })
+    except Exception as e:
+        logger.error(f"Alpaca History Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/current', methods=['GET'])
+def get_current_config():
+    """Return the current active config (from file)"""
+    try:
+        file_path = Path(__file__).parent / 'config.yaml'
+        with open(file_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f)
+        return jsonify(cfg)
+    except Exception as e:
+        logger.error(f"Config Read Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/backtest', methods=['POST'])
 def run_backtest():
     try:
@@ -518,6 +736,7 @@ def run_backtest():
         top_n = data.get('top_n', 10)
         tickers = data.get('tickers', None)
         universe_mode = data.get('universe_mode', 'sp500_nasdaq100')
+        enable_mwu = data.get('enable_mwu', False)
 
         if tickers and isinstance(tickers, str):
             tickers = [t.strip().upper() for t in tickers.split(',') if t.strip()]
@@ -526,11 +745,12 @@ def run_backtest():
 
         logger.info(f"Backtest request: factors={list(factor_config.keys())}, "
                     f"rebalance={rebalance_rule}, years={years}, top_n={top_n}, "
-                    f"universe={universe_mode}, tickers={tickers}")
+                    f"universe={universe_mode}, tickers={tickers}, mwu={enable_mwu}")
 
         result = _run_backtest_with_config(
             factor_config, rebalance_rule, years, top_n,
-            tickers=tickers, universe_mode=universe_mode
+            tickers=tickers, universe_mode=universe_mode,
+            enable_mwu=enable_mwu
         )
 
         # Log the backtest run
@@ -706,6 +926,64 @@ def delete_saved():
         return jsonify({'status': 'ok', 'message': f'Deleted "{name}"'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==========================================
+# Optimizer
+# ==========================================
+
+def _save_optimizer_strategy(name, strategy_dict):
+    """Save an optimizer-generated strategy to the strategies file."""
+    saved = _load_json(STRATEGIES_FILE)
+    # Remove old optimizer entries first
+    saved = {k: v for k, v in saved.items() if not k.startswith('⚡OPT')}
+    saved[name] = strategy_dict
+    _save_json(STRATEGIES_FILE, saved)
+
+
+_optimizer = FactorOptimizer(
+    run_backtest_fn=_run_backtest_with_config,
+    save_strategy_fn=_save_optimizer_strategy
+)
+
+
+@app.route('/optimizer')
+def optimizer_page():
+    return send_from_directory('static', 'optimizer.html')
+
+
+@app.route('/api/optimizer/start', methods=['POST'])
+def optimizer_start():
+    try:
+        data = request.get_json() or {}
+        n_iter = int(data.get('n_iterations', 50))
+        min_f = int(data.get('min_factors', 1))
+        max_f = int(data.get('max_factors', 5))
+        universe = data.get('universe_mode', 'sp500_nasdaq100')
+        tickers_str = data.get('tickers', '')
+        tickers = [t.strip() for t in tickers_str.split(',') if t.strip()] if tickers_str else None
+
+        _optimizer.start(
+            n_iterations=n_iter,
+            min_factors=min_f,
+            max_factors=max_f,
+            universe_mode=universe,
+            tickers=tickers
+        )
+        return jsonify({'status': 'ok', 'message': f'Started {n_iter} iterations'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/optimizer/status')
+def optimizer_status():
+    return jsonify(_optimizer.get_status())
+
+
+@app.route('/api/optimizer/stop', methods=['POST'])
+def optimizer_stop():
+    _optimizer.stop()
+    return jsonify({'status': 'ok', 'message': 'Stopping...'})
 
 
 # ==========================================

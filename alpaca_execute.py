@@ -41,6 +41,7 @@ from alpaca.data.enums import DataFeed, Adjustment
 # 导入我们的模块
 from data_manager import DataManager
 from factor_library import FactorEngine
+from mwu_engine import MWUEngine  # New MWU module
 
 # ==========================================
 # 配置
@@ -267,6 +268,105 @@ def is_rebalance_day(trader, force: bool = False) -> tuple:
         return today.weekday() == 4, "Calendar failed, using Friday"
 
 
+
+# ==========================================
+# MWU Logic
+# ==========================================
+
+def calculate_dynamic_factor_weights(
+    factor_engine: FactorEngine,
+    close_df: pd.DataFrame,
+    volume_df: pd.DataFrame,
+    base_config: dict
+) -> dict:
+    """
+    Use MWU to calculate dynamic weights for factors based on historical performance.
+    """
+    factors_cfg = base_config.get('factors', {})
+    enabled_factors = [k for k, v in factors_cfg.items() if v.get('enabled', False)]
+    
+    if len(enabled_factors) < 2:
+        logger.info("MWU skipped: fewer than 2 enabled factors")
+        return {k: v.get('weight', 0) for k, v in factors_cfg.items()}
+    
+    logger.info(f"Running MWU optimization for: {enabled_factors}")
+    
+    # 1. Compute ALL factors for the whole history
+    all_factor_values = factor_engine.compute_all_factors(close_df, volume_df)
+    
+    # 2. Simulate historical performance
+    # We will step through time (e.g. weekly) and see how each factor performed
+    
+    dates = close_df.index
+    # Start looking back 1 year or so, but we need enough history for factors
+    start_idx = 252 # skip first year for warmup
+    if len(dates) < start_idx + 20:
+        logger.warning("MWU: Not enough history, using static weights")
+        return {k: v.get('weight', 0) for k, v in factors_cfg.items()}
+        
+    mwu = MWUEngine(enabled_factors, learning_rate=0.1)
+    
+    # Resample dates to weekly for simulation (faster & matches trading freq)
+    weekly_dates = [d for d in dates[start_idx:] if d.weekday() == 4] # Fridays
+    
+    factor_history = []
+    
+    for i in range(1, len(weekly_dates)):
+        curr_date = weekly_dates[i]
+        prev_date = weekly_dates[i-1]
+        
+        # Calculate return of each factor from prev_date to curr_date
+        period_returns = {}
+        
+        try:
+            # Prices
+            p_start = close_df.loc[prev_date]
+            p_end = close_df.loc[curr_date]
+            stock_ret = (p_end / p_start) - 1.0
+            
+            # For each factor, pick top N stocks at prev_date
+            for f_name in enabled_factors:
+                f_vals = all_factor_values[f_name].loc[prev_date]
+                # Rank
+                valid = f_vals.dropna().sort_values(ascending=False)
+                top_n = base_config['portfolio']['top_n']
+                picks = valid.head(top_n).index
+                
+                if len(picks) > 0:
+                    # avg return of picks
+                    avg_ret = stock_ret[picks].mean()
+                    period_returns[f_name] = float(avg_ret) if not pd.isna(avg_ret) else 0.0
+                else:
+                    period_returns[f_name] = 0.0
+            
+            # Update MWU
+            # We scale returns by say 10x to make them meaningful for MWU update if they are small daily/weekly rets
+            scaled_returns = {k: v * 5.0 for k, v in period_returns.items()}
+            current_weights = mwu.update(scaled_returns)
+            
+        except Exception as e:
+            # logger.debug(f"MWU step failed: {e}")
+            continue
+            
+    final_weights = mwu.weights
+    
+    # Log the result
+    logger.info("MWU Result Weights:")
+    for k, w in final_weights.items():
+        logger.info(f"  {k}: {w:.4f}")
+        
+    # Merge with full config structure
+    result = {}
+    for k, v in factors_cfg.items():
+        if k in final_weights:
+            result[k] = v.copy()
+            result[k]['weight'] = final_weights[k]
+        else:
+            result[k] = v
+            
+    return result
+
+
 # ==========================================
 # 核心策略逻辑
 # ==========================================
@@ -292,9 +392,50 @@ def calculate_target_weights(
     volume_stocks = volume_df[stock_cols]
     
     logger.info("Computing factors...")
-    factors = engine.compute_all_factors(close_stocks, volume_stocks)
     
-    scores = engine.compute_composite_score(factors)
+    # --- MWU Integration Start ---
+    # Use MWU to adjust factor weights based on history
+    try:
+        updated_factors_config = calculate_dynamic_factor_weights(
+            engine, close_stocks, volume_stocks, config
+        )
+        # Apply updated weights to a temporary config for composite score calculation
+        temp_config = config.copy()
+        temp_config['factors'] = updated_factors_config
+        
+        # Update engine's config temporarily (or pass weights explicitly if supported)
+        # FactorEngine reads from file usually, but we can manually weigh the factors here
+        # or separate the weight application.
+        # Let's do manual composite score calculation here to be safe
+        
+        factors = engine.compute_all_factors(close_stocks, volume_stocks)
+        
+        # Compute composite using NEW weights
+        scores = pd.DataFrame(0.0, index=close_stocks.index, columns=close_stocks.columns)
+        total_w = 0
+        
+        from factor_library import zscore_cross_sectional
+        
+        for f_name, f_cfg in updated_factors_config.items():
+            if not f_cfg.get('enabled', False):
+                continue
+            w = f_cfg.get('weight', 0)
+            if f_name in factors:
+                raw = factors[f_name]
+                norm = zscore_cross_sectional(raw)
+                scores = scores.add(norm * w, fill_value=0)
+                total_w += w
+                
+        if total_w > 0:
+            scores /= total_w
+            
+    except Exception as e:
+        logger.error(f"MWU failed, falling back to static weights: {e}")
+        factors = engine.compute_all_factors(close_stocks, volume_stocks)
+        scores = engine.compute_composite_score(factors)
+    
+    # --- MWU Integration End ---
+
     latest_scores = scores.iloc[-1].dropna().sort_values(ascending=False)
     
     logger.info(f"  Valid factor scores: {len(latest_scores)} stocks")

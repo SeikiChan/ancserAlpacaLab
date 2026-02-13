@@ -4,7 +4,7 @@
 
 # 数据配置
 data:
-  source: "yahoo"  # yahoo | alpaca | csv
+  source: "alpaca"  # yahoo | alpaca | csv
   cache_dir: "data_cache"
   lookback_days: 400
   
@@ -31,7 +31,7 @@ data:
 
 # 股票池配置
 universe:
-  mode: "custom"  # 修改為 custom 模式
+  mode: "nasdaq100"  # custom | sp500 | nasdaq100 | sp500_nasdaq100
   custom_tickers: # 新增一個自定義列表
     - QQQ
     - EWJ   # 日本
@@ -88,7 +88,7 @@ portfolio:
   top_n: 5
   rank_buffer: 10          # 保留排名在 top_n + buffer 内的持仓
   min_hold_days: 10        # 最短持有期
-  max_weight: 0.40         # 单股最大权重
+  max_weight: 1.0          # 单股最大权重
   min_names_to_trade: 1    # 少于此数量则转防御
   
   # 调仓频率
@@ -128,7 +128,7 @@ execution:
   mode: "paper"            # paper | live
   
   # 安全检查
-  max_order_size_pct: 0.15  # 单笔订单不超过账户15%
+  max_order_size_pct: 0.99  # 单笔订单不超过账户99%
   max_daily_trades: 50
   
   # 订单类型
