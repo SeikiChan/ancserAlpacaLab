@@ -88,7 +88,7 @@ if page == "Dashboard":
                     'Unrealized P&L': "${:,.2f}",
                     'P&L %': "{:.2f}%"
                 }), 
-                use_container_width=True
+                width="stretch"
             )
         else:
             st.info("No open positions.")
@@ -102,7 +102,7 @@ if page == "Dashboard":
             ord_df = pd.DataFrame(orders)
             st.dataframe(
                 ord_df[['created_at', 'symbol', 'side', 'qty', 'status', 'filled_avg_price', 'type']], 
-                use_container_width=True
+                width="stretch"
             )
         else:
             st.info("No recent orders.")

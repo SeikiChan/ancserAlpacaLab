@@ -113,10 +113,16 @@ class AlpacaAdapter:
 
     def get_portfolio_history(self, period: str = "1M", timeframe: str = "1D") -> pd.DataFrame:
         """Fetch portfolio history (Equity Curve)."""
+        from alpaca.trading.requests import GetPortfolioHistoryRequest
+        from alpaca.trading.enums import TimeFrame as TradingTimeFrame # Different from data timeframe? No, usually generic string or enum. 
+        # Actually alpaca.trading.requests.GetPortfolioHistoryRequest takes period, timeframe, date_start, date_end, pnl_reset, extended_hours.
+        # Check if TimeFrame enum is needed. Usually strings work but let's check.
+        # The error said unexpected keyword argument 'period' in get_portfolio_history, suggesting it expects a REQUEST OBJECT.
+        
         try:
-            # Fetch last 30 days or suitable period
-            # period: 1M, 1A, etc. timeframe: 1D
-            history = self.trading_client.get_portfolio_history(period=period, timeframe=timeframe)
+            # Construct Request Object
+            req = GetPortfolioHistoryRequest(period=period, timeframe=timeframe, extended_hours=True)
+            history = self.trading_client.get_portfolio_history(req)
             
             # Check if history is valid
             if not history or not hasattr(history, 'timestamp'):
@@ -135,11 +141,10 @@ class AlpacaAdapter:
             # Convert timestamp (Unix epoch seconds)
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
             
-            # Convert to Polars for consistency or keep Pandas for Streamlit
-            # Streamlit likes Pandas.
             return df.set_index('timestamp')
         except Exception as e:
             print(f"[AlpacaAdapter] Get History Error: {e}")
+            return pd.DataFrame()
     def get_orders(self, status: str = 'all', limit: int = 20) -> List[Dict]:
         """Fetch recent orders."""
         from alpaca.trading.requests import GetOrdersRequest
