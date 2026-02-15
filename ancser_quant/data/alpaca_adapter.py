@@ -4,6 +4,7 @@ from alpaca.data.enums import DataFeed, Adjustment
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical import StockHistoricalDataClient
 import polars as pl
+import pandas as pd
 from dotenv import load_dotenv
 import os
 
@@ -110,17 +111,16 @@ class AlpacaAdapter:
             print(f"[AlpacaAdapter] Get Positions Error: {e}")
             return []
 
-    def get_portfolio_history(self) -> pl.DataFrame:
+    def get_portfolio_history(self, period: str = "1M", timeframe: str = "1D") -> pd.DataFrame:
         """Fetch portfolio history (Equity Curve)."""
-        import pandas as pd
         try:
             # Fetch last 30 days or suitable period
             # period: 1M, 1A, etc. timeframe: 1D
-            history = self.trading_client.get_account_portfolio_history(period="1M", timeframe="1D")
+            history = self.trading_client.get_portfolio_history(period=period, timeframe=timeframe)
             
             # Check if history is valid
             if not history or not hasattr(history, 'timestamp'):
-                return pl.DataFrame()
+                return pd.DataFrame()
 
             # Alpaca returns lists
             data = {
@@ -140,4 +140,39 @@ class AlpacaAdapter:
             return df.set_index('timestamp')
         except Exception as e:
             print(f"[AlpacaAdapter] Get History Error: {e}")
-            return pd.DataFrame()
+    def get_orders(self, status: str = 'all', limit: int = 20) -> List[Dict]:
+        """Fetch recent orders."""
+        from alpaca.trading.requests import GetOrdersRequest
+        from alpaca.trading.enums import OrderSide, QueryOrderStatus
+
+        try:
+            req = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=limit, nested=True)
+            orders = self.trading_client.get_orders(filter=req)
+            
+            return [{
+                'id': str(o.id),
+                'symbol': o.symbol,
+                'qty': float(o.qty) if o.qty else 0.0,
+                'side': o.side.value,
+                'type': o.type.value,
+                'status': o.status.value,
+                'filled_avg_price': float(o.filled_avg_price) if o.filled_avg_price else None,
+                'created_at': o.created_at
+            } for o in orders]
+        except Exception as e:
+            print(f"[AlpacaAdapter] Get Orders Error: {e}")
+            return []
+
+    def get_clock(self) -> Dict:
+        """Fetch market clock (is_open, next_open, next_close)."""
+        try:
+            clock = self.trading_client.get_clock()
+            return {
+                'is_open': clock.is_open,
+                'next_open': clock.next_open,
+                'next_close': clock.next_close,
+                'timestamp': clock.timestamp
+            }
+        except Exception as e:
+            print(f"[AlpacaAdapter] Get Clock Error: {e}")
+            return {'is_open': False}

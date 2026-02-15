@@ -63,8 +63,8 @@ APCA_API_KEY_ID=your_api_key
 APCA_API_SECRET_KEY=your_secret_key
 ```
 
-Edit `config/titan_config.yaml` to customize settings (Universe, Risk params, etc.).
-編輯 `config/titan_config.yaml` 以自訂設定（股票池、風險參數等）。
+Edit `config/ancser_quant.yaml` to customize settings (Universe, Risk params, etc.).
+編輯 `config/ancser_quant.yaml` 以自訂設定（股票池、風險參數等）。
 
 ### 3. Launch Dashboard / 啟動儀表板
 ```bash
@@ -76,7 +76,7 @@ streamlit run dashboard/app.py
 ### 4. Run Execution / 執行交易引擎 (Server)
 ```bash
 # Windows
-python -m titan_core.execution.main_loop
+python -m ancser_quant.execution.main_loop
 ```
 
 ---
@@ -86,10 +86,10 @@ python -m titan_core.execution.main_loop
 ```
 ancserAlpacaLab/
 ├── config/                 # Configuration files
-│   └── titan_config.yaml   # System settings
+│   └── ancser_quant.yaml   # System settings
 ├── dashboard/              # Frontend Application
 │   └── app.py              # Streamlit Entry Point
-├── titan_core/             # Core System Logic
+├── ancser_quant/             # Core System Logic
 │   ├── alpha/              # Alpha Research Layer (Brain)
 │   │   ├── factors.py      # Factor Implementations (Polars)
 │   │   └── mwu.py          # Dynamic Weighting Engine

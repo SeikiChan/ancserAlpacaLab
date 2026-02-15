@@ -37,23 +37,56 @@ class YahooAdapter:
         # Process into long format
         # Pandas MultiIndex (Ticker, Attributes) -> Ticker column
         
+        # Helper function to align schema before concat
+        def align_schema(pdf):
+            # Ensure columns exist
+            required_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'symbol']
+            
+            for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+                if col not in pdf.columns:
+                    pdf[col] = 0.0
+            
+            # Convert critical columns to consistent types
+            pdf['Volume'] = pdf['Volume'].fillna(0).astype(float)
+            pdf['Open'] = pdf['Open'].astype(float)
+            pdf['High'] = pdf['High'].astype(float)
+            pdf['Low'] = pdf['Low'].astype(float)
+            pdf['Close'] = pdf['Close'].astype(float)
+            
+            # Strict Column Selection to avoid ShapeError (7 vs 8 cols)
+            # Some tickers might return 'Adj Close', 'Dividends', etc.
+            return pdf[required_cols]
+
         frames = []
         if len(symbols) == 1:
              # Single ticker structure is flat
              sym = symbols[0]
              df_pandas['symbol'] = sym
+             df_pandas = align_schema(df_pandas)
              frames.append(pl.from_pandas(df_pandas.reset_index()))
         else: 
             # Multi-ticker
+            # If MultiIndex (Ticker, Attributes), yfinance structure varies by version.
             for sym in symbols:
                 try:
+                    # Check if symbol exists in columns (Top level)
+                    if sym not in df_pandas.columns:
+                        continue
+                        
                     subset = df_pandas[sym].copy()
                     subset['symbol'] = sym
+                    subset = align_schema(subset)
+                    
                     # Reset index to get Date column
                     subset = subset.reset_index()
                     frames.append(pl.from_pandas(subset))
                 except KeyError:
                     pass # Symbol not found in data
+                except Exception as e:
+                    print(f"Error processing {sym}: {e}")
+        
+        if not frames:
+            return pl.LazyFrame({})
         
         if not frames:
             return pl.LazyFrame({})

@@ -15,7 +15,7 @@ st.set_page_config(page_title="AncserAlpacaLab", layout="wide", page_icon=None)
 st.title("ancserAlpacaLab")
 
 # Sidebar Navigation
-page = st.sidebar.radio("Navigation", ["Dashboard", "Factor Lab", "Backtest", "Event Log"])
+page = st.sidebar.radio("Navigation", ["Dashboard", "Backtest"])
 
 # --- Helper Functions (Simulation for MVP) ---
 @st.cache_data
@@ -29,7 +29,7 @@ if page == "Dashboard":
     st.header("Overview")
     
     # Fetch Real Data
-    from titan_core.data.alpaca_adapter import AlpacaAdapter
+    from ancser_quant.data.alpaca_adapter import AlpacaAdapter
     try:
         adapter = AlpacaAdapter()
         acct = adapter.get_account()
@@ -50,9 +50,22 @@ if page == "Dashboard":
     col3.metric("Status", acct.get('status', 'Unknown'))
     col4.metric("Currency", acct.get('currency', 'USD'))
     
-    st.subheader("Equity Curve (1 Month)")
+    st.subheader("Equity Curve")
+    
+    # Timeframe Selector
+    tf_col, _ = st.columns([1, 3])
+    # Alpaca Valid Periods: 1D, 1W, 1M, 3M, 1A, 5A. (6M and ALL are often not supported explicitly in this endpoint)
+    period_map = {
+        "1 Month": "1M",
+        "3 Months": "3M", 
+        "1 Year": "1A",
+        "5 Years": "5A"
+    }
+    selected_label = tf_col.selectbox("Timeframe", list(period_map.keys()), index=0)
+    selected_tf = period_map[selected_label]
+
     try:
-        hist_df = adapter.get_portfolio_history()
+        hist_df = adapter.get_portfolio_history(period=selected_tf)
         if not hist_df.empty:
             st.area_chart(hist_df['equity'], color='#00CC96') # Standard Alpaca Green-ish
         else:
@@ -60,7 +73,7 @@ if page == "Dashboard":
     except Exception as e:
         st.error(f"Failed to load chart: {e}")
     
-    st.subheader("Holdings (Real)")
+    st.subheader("Holdings")
     try:
         positions = adapter.get_positions()
         if positions:
@@ -82,34 +95,21 @@ if page == "Dashboard":
     except Exception as e:
         st.error(f"Failed to load holdings: {e}")
 
+    st.subheader("Recent Orders")
+    try:
+        orders = adapter.get_orders()
+        if orders:
+            ord_df = pd.DataFrame(orders)
+            st.dataframe(
+                ord_df[['created_at', 'symbol', 'side', 'qty', 'status', 'filled_avg_price', 'type']], 
+                use_container_width=True
+            )
+        else:
+            st.info("No recent orders.")
+    except Exception as e:
+        st.error(f"Failed to load orders: {e}")
 
-# --- Page: Factor Lab ---
-elif page == "Factor Lab":
-    st.header("Factor Lab (Alpha Research)")
-    
-    tab1, tab2 = st.tabs(["MWU Weights", "Factor IC"])
-    
-    with tab1:
-        st.subheader("Dynamic Factor Weights (MWU)")
-        # Mock Weights History
-        dates = pd.date_range(end=datetime.today(), periods=30)
-        weights = pd.DataFrame(np.random.dirichlet(np.ones(4), size=30), 
-                               columns=['Momentum', 'Reversion', 'Skew', 'Microstructure'],
-                               index=dates)
-        
-        st.area_chart(weights)
-        st.caption("Shows how the system automatically reallocates capital to performing factors.")
 
-    with tab2:
-        st.subheader("Information Coefficient (IC) Heatmap")
-        st.write("Correlation between factor values and forward returns.")
-        # Mock IC
-        ic_data = pd.DataFrame(np.random.randn(10, 4) * 0.1, 
-                               columns=['Momentum', 'Reversion', 'Skew', 'Microstructure'],
-                               index=[f"Day -{i}" for i in range(10)])
-        st.dataframe(ic_data.style.background_gradient(cmap='RdYlGn', vmin=-0.2, vmax=0.2))
-
-# --- Page: Backtest ---
 
 # --- Page: Backtest ---
 elif page == "Backtest":
@@ -118,33 +118,102 @@ elif page == "Backtest":
     with st.form("backtest_config"):
         col1, col2 = st.columns(2)
         # Default start date 2018-01-01
-        start_date = col1.date_input("Start Date", datetime(2018, 1, 1))
+        start_date = col1.date_input("Start Date", datetime(2020, 1, 1))
         end_date = col2.date_input("End Date", datetime.today())
         
-        # Define Universe (Tech Titans)
-        universe = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'AMD', 'SPY', 'QQQ']
-        st.write(f"Universe: {len(universe)} symbols (Tech Titans)")
+        # Define Universe
+        
+        # Load larger universe if available
+        try:
+            from ancser_quant.data.constituents import TICKERS as SPY_QQQ_TICKERS
+        except ImportError:
+            SPY_QQQ_TICKERS = []
+
+        tech_titans = "AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA, META, AMD, SPY, QQQ"
+        full_universe = ", ".join(SPY_QQQ_TICKERS) if SPY_QQQ_TICKERS else tech_titans
+
+        # Data Source Logic
+        import os
+        has_alpaca_keys = os.getenv("APCA_API_KEY_ID") and os.getenv("APCA_API_SECRET_KEY")
+        default_ds_idx = 0 if has_alpaca_keys else 1
+        
+        with st.expander("Data Source Configuration", expanded=True):
+            data_source = st.radio("Market Data Source", ["Alpaca (API)", "Yahoo Finance (Free)"], index=default_ds_idx)
+            if data_source == "Alpaca (API)" and not has_alpaca_keys:
+                st.error("Alpaca API Keys not found in .env!")
+
+
+        with st.expander("Universe Configuration", expanded=False):
+            # Default to S&P 500 + Nasdaq 100 (500+) which is index 1
+            u_preset = st.selectbox("Universe Preset", ["Default", "S&P 500 + Nasdaq 100 (500+)"], index=1)
+            
+            if u_preset == "Default":
+                default_val = tech_titans
+            else:
+                default_val = full_universe
+                
+            universe_input = st.text_area("Symbols (comma separated)", value=default_val, height=150, help="Edit to customize.")
+            
+            if u_preset == "S&P 500 + Nasdaq 100 (500+)":
+                st.warning(f"⚠️ Warning: fetching data for {len(SPY_QQQ_TICKERS)} symbols may take a few minutes!")
+            
+        # Parse Universe
+        universe = [s.strip().upper() for s in universe_input.split(',') if s.strip()]
+        st.write(f"Universe: {len(universe)} symbols")
         
         all_factors = ['Momentum', 'Reversion', 'Skew', 'Microstructure', 'Alpha 101', 'Volatility']
         factors = st.multiselect("Active Factors", all_factors, default=['Momentum', 'Reversion'])
         
         c3, c4 = st.columns(2)
+        c3, c4 = st.columns(2)
         leverage = c3.slider("Max Leverage", 1.0, 3.0, 1.0)
         use_mwu = c4.checkbox("Enable MWU (Dynamic Weighting)", value=True)
         
-        col_btn1, col_btn2 = st.columns([1,2])
+        with st.expander("Risk Management (Volatility Targeting)", expanded=True):
+            use_vol_target = st.checkbox("Enable Volatility Targeting (Constant Risk)", value=True)
+            vol_target = st.slider("Target Volatility (Annualized)", 0.05, 1.0, 0.20, 0.05)
+            st.caption(f"If realized volatility < {vol_target:.0%}, leverage increases (up to {leverage}x). If > {vol_target:.0%}, exposure is cut.")
+        
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 2])
         submitted = col_btn1.form_submit_button("Run Backtest")
         run_combo = col_btn2.form_submit_button("Run Factor Combinatorial Search (Loop All)")
+        save_config = col_btn3.form_submit_button("💾 Save/Apply to Live Strategy")
+        
+        if save_config:
+            import json
+            import os
+            
+            config_path = "config/live_strategy.json"
+            live_config = {
+                "active_factors": factors,
+                "leverage": leverage,
+                "universe": universe,
+                "use_mwu": use_mwu,
+                "use_vol_target": use_vol_target,
+                "vol_target": vol_target,
+                "last_updated": datetime.now().isoformat()
+            }
+            
+            try:
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(config_path), exist_ok=True)
+                with open(config_path, 'w') as f:
+                    json.dump(live_config, f, indent=4)
+                st.success(f"Configuration saved to {config_path}! The Execution Engine will pick this up on next rebalance.")
+                st.json(live_config)
+            except Exception as e:
+                st.error(f"Failed to save configuration: {e}")
         
         if run_combo:
             st.info("Starting Combinatorial Search... This may take a minute.")
             import itertools
-            from titan_core.backtest import BacktestEngine
-            from titan_core.data.yahoo_adapter import YahooAdapter
+            from ancser_quant.backtest import BacktestEngine
+            from ancser_quant.data.yahoo_adapter import YahooAdapter
             
             # 1. Fetch & Prepare Data ONCE
             progress = st.progress(0)
-            engine = BacktestEngine(initial_capital=100000.0)
+            src_code = 'alpaca' if data_source == "Alpaca (API)" else 'yahoo'
+            engine = BacktestEngine(initial_capital=100000.0, data_source=src_code)
             s_str = start_date.strftime('%Y-%m-%d')
             e_str = end_date.strftime('%Y-%m-%d')
             
@@ -172,15 +241,19 @@ elif page == "Backtest":
             bench_df_lazy = yahoo.fetch_history(benchmarks, s_str, e_str)
             bench_df = bench_df_lazy.collect().to_pandas()
             
-            # 3. Loop
+            # 3. Multi-threaded Loop
+            import concurrent.futures
+            
             total_steps = len(combos)
             
-            for idx, combo in enumerate(combos):
-                combo_name = " + ".join(combo)
+            def run_single_combo(combo):
+                c_name = " + ".join(combo)
                 # Run Simulation
-                res, _ = engine.run_simulation(data, list(combo), leverage, use_mwu)
-                
-                if not res.empty:
+                try:
+                    res, _ = engine.run_simulation(data, list(combo), leverage, use_mwu, use_vol_target, vol_target)
+                    if res.empty:
+                        return None
+                        
                     eq = res['equity']
                     start_eq = eq.iloc[0]
                     end_eq = eq.iloc[-1]
@@ -198,20 +271,35 @@ elif page == "Backtest":
                     daily_ret = eq.pct_change().dropna()
                     sharpe = (daily_ret.mean() / daily_ret.std()) * (252**0.5) if daily_ret.std() > 0 else 0
                     
-                    results_list.append({
-                        'Combination': combo_name,
+                    return {
+                        'Combination': c_name,
                         'Factors': len(combo),
                         'Final Equity': end_eq,
                         'CAGR': cagr,
                         'Sharpe': sharpe,
                         'MDD': mdd,
-                        'Calmar': calmar
-                    })
-                    
-                    # Store curve for later plotting
-                    eq_curves[combo_name] = eq
+                        'Calmar': calmar,
+                        'EquityCurve': eq
+                    }
+                except Exception as e:
+                    return None
+
+            # Run in parallel
+            # Adjust max_workers as needed (usually 2x cores is fine for I/O mixed, but this is CPU heavy python loop)
+            # Python threading has GIL, so this might not be 100% true parallel for pure python logic, 
+            # but Polars operations internally release GIL.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(32, len(combos))) as executor:
+                futures = {executor.submit(run_single_combo, c): c for c in combos}
                 
-                progress.progress((idx + 1) / total_steps)
+                for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                    res = future.result()
+                    if res:
+                        # Separate curve from metrics to avoid huge dataframe display issues
+                        curve = res.pop('EquityCurve')
+                        eq_curves[res['Combination']] = curve
+                        results_list.append(res)
+                    
+                    progress.progress((i + 1) / total_steps)
             
             # 4. Rank Results
             rank_df = pd.DataFrame(results_list)
@@ -249,8 +337,20 @@ elif page == "Backtest":
                 # Add Benchmarks
                 if not bench_df.empty:
                     bench_df['timestamp'] = pd.to_datetime(bench_df['timestamp'])
+                    if bench_df['timestamp'].dt.tz is not None:
+                         bench_df['timestamp'] = bench_df['timestamp'].dt.tz_localize(None)
+                    
                     pivot_bench = bench_df.pivot(index='timestamp', columns='symbol', values='close')
-                    pivot_bench = pivot_bench.reindex(eq_curves[top_5[0]].index, method='ffill')
+                    
+                    # Ensure equity index is also datetime and naive
+                    ref_idx = eq_curves[top_5[0]].index
+                    if not isinstance(ref_idx, pd.DatetimeIndex):
+                        ref_idx = pd.to_datetime(ref_idx)
+                    
+                    if ref_idx.tz is not None:
+                        ref_idx = ref_idx.tz_localize(None)
+                        
+                    pivot_bench = pivot_bench.reindex(ref_idx, method='ffill')
                     
                     b_colors = {'SPY': 'gray', 'QQQ': 'silver', 'GLD': 'gold'}
                     for b in benchmarks:
@@ -293,10 +393,12 @@ elif page == "Backtest":
             sys.stdout = log_capture
 
             try:
-                from titan_core.backtest import BacktestEngine
-                from titan_core.data.yahoo_adapter import YahooAdapter
+                from ancser_quant.backtest import BacktestEngine
+                from ancser_quant.data.yahoo_adapter import YahooAdapter
                 
-                engine = BacktestEngine(initial_capital=100000.0)
+                # Prepare Source String
+                src_code = 'alpaca' if data_source == "Alpaca (API)" else 'yahoo'
+                engine = BacktestEngine(initial_capital=100000.0, data_source=src_code)
                 
                 # Convert dates to string
                 s_str = start_date.strftime('%Y-%m-%d')
@@ -305,7 +407,7 @@ elif page == "Backtest":
                 progress.progress(10)
                 
                 # 1. Run Strategy Backtest
-                results, weight_history = engine.run(universe, s_str, e_str, factors, leverage, use_mwu)
+                results, weight_history = engine.run(universe, s_str, e_str, factors, leverage, use_mwu, use_vol_target, vol_target)
                 
                 progress.progress(50)
                 
@@ -342,9 +444,18 @@ elif page == "Backtest":
                     chart_data = pd.DataFrame({'Strategy': equity})
                     
                     if not bench_df.empty:
+                        # Fix Timezone Mismatch: Yahoo likely returns UTC-aware, Strategy is likely Naive (from Polars)
                         bench_df['timestamp'] = pd.to_datetime(bench_df['timestamp'])
+                        if bench_df['timestamp'].dt.tz is not None:
+                             bench_df['timestamp'] = bench_df['timestamp'].dt.tz_localize(None)
+                        
                         pivot_bench = bench_df.pivot(index='timestamp', columns='symbol', values='close')
                         
+                        # Ensure equity index is also datetime and naive
+                        equity.index = pd.to_datetime(equity.index)
+                        if equity.index.tz is not None:
+                            equity.index = equity.index.tz_localize(None)
+
                         # Align benchmarks to strategy dates
                         pivot_bench = pivot_bench.reindex(equity.index, method='ffill')
                         
@@ -375,12 +486,14 @@ elif page == "Backtest":
                     # Calmar Ratio
                     calmar = cagr / abs(max_dd) if max_dd < 0 else 0.0
                     
+                    
                     # Draw Metrics
-                    m1, m2, m3, m4 = st.columns(4)
+                    m1, m2, m3, m4, m5 = st.columns(5)
                     m1.metric("Final Equity", f"${end_eq:,.2f}", f"{total_ret:.2%}")
                     m2.metric("CAGR", f"{cagr:.2%}")
                     m3.metric("Sharpe", f"{sharpe:.2f}")
-                    m4.metric("Calmar", f"{calmar:.2f}", f"MDD: {max_dd:.2%}")
+                    m4.metric("Calmar", f"{calmar:.2f}")
+                    m5.metric("Max Drawdown", f"{max_dd:.2%}")
                     
                     st.subheader("Equity Curve vs Benchmarks")
                     
@@ -515,23 +628,4 @@ elif page == "Backtest":
 
 
 
-# --- Page: Event Log ---
-elif page == "Event Log":
-    st.header("System Events")
-    logs = pd.DataFrame({
-        'Timestamp': [datetime.now() - timedelta(minutes=i*15) for i in range(10)],
-        'Level': ['INFO', 'INFO', 'WARNING', 'INFO'] * 2 + ['INFO', 'INFO'],
-        'Message': [
-            'Heartbeat check passed',
-            'Rebalance complete',
-            'Slippage warning on TSLA order',
-            'Factor calculation finished',
-            'Market data updated',
-            'System started',
-            'Config loaded',
-            'Database connected',
-            'User login',
-            'Daily maintenance'
-        ]
-    })
-    st.dataframe(logs, use_container_width=True)
+
