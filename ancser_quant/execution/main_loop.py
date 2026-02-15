@@ -1,5 +1,4 @@
 import logging
-import pytz
 import pandas as pd
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -117,12 +116,39 @@ class TitanEventLoop:
                 except Exception as vol_e:
                     logger.error(f"Error calculating Volatility Scalar: {vol_e}. Defaulting to 1.0.")
             
-            # 3. Compute Factors & Weights (Live)
-            # ... (Factor logic would go here)
+            # 3. Live Strategy Calculation
+            from ancser_quant.execution.strategy import LiveStrategy
+            strat = LiveStrategy()
             
-            logger.info(f"Rebalance Logic Executed. Final Target Exposure Scalar: {target_scalar:.2f}x")
-            # To actually place orders, we would generate target weights -> diff -> OMS -> alpaca.submit_order
-            # oms.generate_orders(target_weights * target_scalar, ...)
+            # Use the loaded config
+            res = strat.calculate_targets(strategy_config)
+            
+            if "error" in res:
+                logger.error(f"Strategy Calculation Error: {res['error']}")
+                return
+
+            # Extract Results
+            target_weights = res.get('allocations', {})
+            vol_metrics = res.get('vol_metrics', {})
+            
+            # Update target scalar from LiveStrategy result (it handles vol targeting internally now)
+            final_scalar = vol_metrics.get('final_scalar', 1.0)
+            
+            logger.info(f"Rebalance Logic Executed. Final Target Exposure Scalar: {final_scalar:.2f}x")
+            
+            if not target_weights:
+                logger.warning("No target weights generated. Portfolio may be empty.")
+            else:
+                logger.info(f"Generated Targets for {len(target_weights)} assets.")
+                
+            # 4. Order Management System (OMS)
+            from ancser_quant.execution.oms import OrderManagementSystem
+            oms = OrderManagementSystem()
+            
+            logger.info("Executing Rebalance Orders...")
+            oms.generate_and_execute_orders(target_weights)
+            
+            logger.info("Rebalance Cycle Completed.")
             
         except Exception as e:
             logger.error(f"Rebalance Failed: {e}")

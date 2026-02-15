@@ -114,9 +114,8 @@ class AlpacaAdapter:
     def get_portfolio_history(self, period: str = "1M", timeframe: str = "1D") -> pd.DataFrame:
         """Fetch portfolio history (Equity Curve)."""
         from alpaca.trading.requests import GetPortfolioHistoryRequest
-        from alpaca.trading.enums import TimeFrame as TradingTimeFrame # Different from data timeframe? No, usually generic string or enum. 
-        # Actually alpaca.trading.requests.GetPortfolioHistoryRequest takes period, timeframe, date_start, date_end, pnl_reset, extended_hours.
-        # Check if TimeFrame enum is needed. Usually strings work but let's check.
+        # TimeFrame enum from alpaca.trading.enums does not exist. Using strings directly.
+        # GetPortfolioHistoryRequest takes period, timeframe, date_start, date_end, pnl_reset, extended_hours.
         # The error said unexpected keyword argument 'period' in get_portfolio_history, suggesting it expects a REQUEST OBJECT.
         
         try:
@@ -162,7 +161,9 @@ class AlpacaAdapter:
                 'type': o.type.value,
                 'status': o.status.value,
                 'filled_avg_price': float(o.filled_avg_price) if o.filled_avg_price else None,
-                'created_at': o.created_at
+                'notional': float(o.notional) if o.notional else None,
+                'created_at': o.created_at,
+                'filled_qty': float(o.filled_qty) if o.filled_qty else 0.0
             } for o in orders]
         except Exception as e:
             print(f"[AlpacaAdapter] Get Orders Error: {e}")
@@ -181,3 +182,44 @@ class AlpacaAdapter:
         except Exception as e:
             print(f"[AlpacaAdapter] Get Clock Error: {e}")
             return {'is_open': False}
+
+    def submit_order(self, symbol: str, qty: float, side: str, type: str = 'market', time_in_force: str = 'day', notional: float = None):
+        """
+        Submit an order to Alpaca.
+        Supports both quantity-based and notional-based (dollar amount) orders.
+        """
+        from alpaca.trading.requests import MarketOrderRequest
+        from alpaca.trading.enums import OrderSide, TimeInForce
+        
+        try:
+            # Determine Side
+            side_enum = OrderSide.BUY if side.lower() == 'buy' else OrderSide.SELL
+            
+            req_params = {
+                "symbol": symbol,
+                "side": side_enum,
+                "time_in_force": TimeInForce.DAY
+            }
+            
+            if notional and notional > 0:
+                req_params["notional"] = round(notional, 2)
+            else:
+                req_params["qty"] = qty
+                
+            req = MarketOrderRequest(**req_params)
+                
+            order = self.trading_client.submit_order(order_data=req)
+            print(f"[AlpacaAdapter] Order Submitted: {side.upper()} {symbol} (ID: {order.id})")
+            return order
+            
+        except Exception as e:
+            print(f"[AlpacaAdapter] Submit Order Error: {e}")
+            raise e
+
+    def cancel_all_orders(self):
+        """Cancel all open orders."""
+        try:
+            self.trading_client.cancel_orders()
+            print("[AlpacaAdapter] All open orders cancelled.")
+        except Exception as e:
+            print(f"[AlpacaAdapter] Cancel Orders Error: {e}")

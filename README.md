@@ -48,10 +48,9 @@
 
 ## Quick Start / 快速啟動
 
-### 1. Install Dependencies / 安裝依賴
-```bash
-pip install -r requirements.txt
-```
+### 1. Install & Setup / 安裝與設置
+Double-click **`setup.bat`** (or run `pip install -r requirements.txt`).
+雙擊 **`setup.bat`**（或執行 `pip install -r requirements.txt`）以配置運行環境。
 
 ### 2. Configuration / 設定
 Create a `.env` file in the root directory:
@@ -61,15 +60,23 @@ APCA_API_KEY_ID=your_api_key
 APCA_API_SECRET_KEY=your_secret_key
 ```
 
-### 3. Daily Operation / 日常操作 (Recommended)
-Just double-click **`daily_run.bat`**!
-只需雙擊 **`daily_run.bat`**！
+### 3. Daily Operation / 日常操作 (Safe)
+Double-click **`daily_run.bat`**:
+雙擊 **`daily_run.bat`**：
+- Checks market hours (doesn't trade if closed).
+- Launches the **Dashboard**.
+- Runs **Execution Logic** to rebalance portfolio.
 
-- It checks if the market is Open.
-- It launches the **Dashboard** (Web UI) for you to view.
-- It runs the **Execution Logic** (Black Window) to rebalance your portfolio, then automatically closes.
+### 4. Force Execution / 強制執行 (Manual)
+Double-click **`force_run.bat`**:
+雙擊 **`force_run.bat`**：
+- **Ignores market hours** (run anytime).
+- **Cancels all open orders** first.
+- **Forces a rebalance** to target weights immediately.
+- Use this to manually update positions or fix stuck orders.
+- 這是用來**強行更新訂單**的工具。
 
-### 4. Backtesting / 回測
+### 5. Backtesting / 回測
 1. Open Dashboard (`daily_run.bat` or `streamlit run dashboard/app.py`).
 2. Go to "Strategy Lab" in the sidebar.
 3. Select "Alpaca (API)" data source.
