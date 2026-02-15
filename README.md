@@ -23,7 +23,7 @@
 ### 1. High-Performance Data Engine (高性能數據引擎)
 - **Polars Core**: Rust-based DataFrame library for memory efficiency and speed.
 - **Strict Schema**: `schema.py` enforces data types (`Float32`, `Categorical`) to prevent data corruption.
-- **Unified Adapters**: Seamless data ingestion from **Yahoo Finance** (Backfill) and **Alpaca** (Real-time).
+- **Unified Adapters**: Seamless data ingestion from **Yahoo Finance** (Backtesting) and **Alpaca** (Real-time Execution).
 
 ### 2. Alpha Factor Library (Alpha 因子庫)
 - **Cross-Sectional Focus**: Factors rank stocks against their peers rather than just time-series analysis.
@@ -32,19 +32,17 @@
     - **Higher Moments**: Skewness (Lottery payoff), Idiosyncratic Volatility.
     - **Microstructure**: Amihud Illiquidity, Spread Proxy.
     - **Alpha 101**: WorldQuant-style mathematical alphas.
-- **MWU Engine**: Dynamic Weighting mechanism that adjusts factor exposure based on recent IC (Information Coefficient). Automatically rotates between Momentum and Reversion regimes.
+- **MWU Engine**: Dynamic Weighting mechanism that adjusts factor exposure based on recent IC (Information Coefficient).
 
-### 3. Execution Engine (執行引擎)
-- **Event-Driven**: Built on `APScheduler` with reliable Heartbeat (1m) and Rebalance (1h) loops.
-- **Order Management System (OMS)**:
-    - **Diff Engine**: Calculates exact order deltas to reach target portfolio.
-    - **TWAP Slicer**: Splits large orders into smaller chunks to minimize market impact.
-    - **Risk Gate**: Enforces position limits (e.g., max 10% per stock).
+### 3. Risk Management (風險管理)
+- **Volatility Targeting (Constant Risk)**: Automatically adjusts portfolio leverage based on realized volatility (e.g., Target 20% Vol).
+- **Daily Batch Control**: Designed for robust daily rebalancing, protecting against inter-day trends.
+- **Idempotent OMS**: Target-based execution ensures safety even if scripts are re-run.
 
 ### 4. Interactive Dashboard (交互式儀表板)
 - **Streamlit App**: Real-time visualization of Equity Curve, P&L, and Positions.
-- **Factor Lab**: Visualize dynamic MWU weights and Factor IC heatmaps.
-- **Backtest**: Configure and run high-speed backtests directly from the UI.
+- **Backtest Engine**: Configure and run high-speed backtests directly from the UI.
+- **Live Strategy Config**: Adjust risk parameters (Target Vol, Max Leverage) on the fly without restarting code.
 
 ---
 
@@ -56,28 +54,26 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configuration / 設定
-Create a `.env` file in the root directory with your Alpaca API keys:
-建立 `.env` 檔案並填入您的 Alpaca API 金鑰：
+Create a `.env` file in the root directory:
+建立 `.env` 檔案：
 ```env
 APCA_API_KEY_ID=your_api_key
 APCA_API_SECRET_KEY=your_secret_key
 ```
 
-Edit `config/ancser_quant.yaml` to customize settings (Universe, Risk params, etc.).
-編輯 `config/ancser_quant.yaml` 以自訂設定（股票池、風險參數等）。
+### 3. Daily Operation / 日常操作 (Recommended)
+Just double-click **`daily_run.bat`**!
+只需雙擊 **`daily_run.bat`**！
 
-### 3. Launch Dashboard / 啟動儀表板
-```bash
-streamlit run dashboard/app.py
-```
-> The dashboard will open automatically in your default browser (usually http://localhost:8501).
-> 儀表板將自動在您的預設瀏覽器中開啟（通常是 http://localhost:8501）。
+- It checks if the market is Open.
+- It launches the **Dashboard** (Web UI) for you to view.
+- It runs the **Execution Logic** (Black Window) to rebalance your portfolio, then automatically closes.
 
-### 4. Run Execution / 執行交易引擎 (Server)
-```bash
-# Windows
-python -m ancser_quant.execution.main_loop
-```
+### 4. Backtesting / 回測
+1. Open Dashboard (`daily_run.bat` or `streamlit run dashboard/app.py`).
+2. Go to "Strategy Lab" in the sidebar.
+3. Select "Alpaca (API)" data source.
+4. Click "Run Backtest".
 
 ---
 
@@ -85,22 +81,18 @@ python -m ancser_quant.execution.main_loop
 
 ```
 ancserAlpacaLab/
-├── config/                 # Configuration files
-│   └── ancser_quant.yaml   # System settings
-├── dashboard/              # Frontend Application
-│   └── app.py              # Streamlit Entry Point
-├── ancser_quant/             # Core System Logic
-│   ├── alpha/              # Alpha Research Layer (Brain)
-│   │   ├── factors.py      # Factor Implementations (Polars)
-│   │   └── mwu.py          # Dynamic Weighting Engine
-│   ├── data/               # Data Infrastructure
-│   │   ├── schema.py       # Data Types Definition
-│   │   ├── alpaca_adapter.py
-│   │   └── yahoo_adapter.py
-│   └── execution/          # Execution Layer (Body)
-│       ├── main_loop.py    # Event Loop
-│       └── oms.py          # Order Management
-└── requirements.txt        # Python Dependencies
+├── ancser_quant/           # Core System Logic
+│   ├── alpha/              # Factor Library & MWU
+│   ├── data/               # Data Adapters (Alpaca/Yahoo)
+│   ├── execution/          # Execution Loop & Logic
+│   └── backtest.py         # Polars Backtest Engine
+├── config/                 # Configuration
+│   ├── ancser_quant.yaml   # Static Config
+│   └── live_strategy.json  # Dynamic Strategy State
+├── dashboard/              # Frontend (Streamlit)
+│   └── app.py              # Dashboard Entry Point
+├── daily_run.bat           # Daily Automation Script
+└── requirements.txt        # Dependencies
 ```
 
 ---
