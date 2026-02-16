@@ -1,7 +1,9 @@
 {
     "active_factors": [
         "Momentum",
-        "Reversion"
+        "Reversion",
+        "Skew",
+        "Drift-Reversion"
     ],
     "leverage": 1.0,
     "universe": [
@@ -526,5 +528,5 @@
     "use_mwu": true,
     "use_vol_target": true,
     "vol_target": 0.2,
-    "last_updated": "2026-02-14T22:20:34.822765"
+    "last_updated": "2026-02-15T22:20:16.320786"
 }

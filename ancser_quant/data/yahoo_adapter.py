@@ -3,23 +3,66 @@ import polars as pl
 from .schema import MARKET_DATA_SCHEMA
 from datetime import datetime
 from typing import List
+import os
+import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class YahooAdapter:
     """
     Fetches historical data from Yahoo Finance and converts to Polars LazyFrame.
     Primarily used for Backfill.
+    Supports caching and parallel downloads.
     """
+    def __init__(self, cache_dir: str = "data_cache"):
+        self.cache_dir = cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
+
+    def _get_cache_key(self, symbols: List[str], start_date: str, end_date: str) -> str:
+        """Generate cache key from symbols and dates"""
+        symbols_str = "_".join(sorted(symbols))
+        key_str = f"{symbols_str}_{start_date}_{end_date}"
+        # Use hash if too long
+        if len(key_str) > 200:
+            return hashlib.md5(key_str.encode()).hexdigest()
+        return key_str.replace(":", "").replace("/", "-")
+
+    def _get_cache_path(self, cache_key: str) -> str:
+        """Get cache file path"""
+        return os.path.join(self.cache_dir, f"{cache_key}.parquet")
+
+    def _load_from_cache(self, cache_path: str) -> pl.LazyFrame:
+        """Load data from cache if exists"""
+        if os.path.exists(cache_path):
+            try:
+                print(f"[Cache] Loading from {os.path.basename(cache_path)}")
+                return pl.scan_parquet(cache_path)
+            except Exception as e:
+                print(f"[Cache] Failed to load: {e}")
+        return None
+
+    def _save_to_cache(self, df: pl.DataFrame, cache_path: str):
+        """Save data to cache"""
+        try:
+            df.write_parquet(cache_path)
+            print(f"[Cache] Saved to {os.path.basename(cache_path)}")
+        except Exception as e:
+            print(f"[Cache] Failed to save: {e}")
+
     def fetch_history(self, symbols: List[str], start_date: str, end_date: str = None) -> pl.LazyFrame:
         if not end_date:
             end_date = datetime.now().strftime('%Y-%m-%d')
 
+        # Check cache first
+        cache_key = self._get_cache_key(symbols, start_date, end_date)
+        cache_path = self._get_cache_path(cache_key)
+        cached_data = self._load_from_cache(cache_path)
+
+        if cached_data is not None:
+            return cached_data
+
         print(f"[YahooAdapter] Fetching {len(symbols)} symbols from {start_date} to {end_date}")
-        
-        # Download using yfinance (Pandas based)
-        # We download individually to avoid MultiIndex complexity with Polars for now,
-        # or download all and process.
-        
-        # Optimized: Group download
+
+        # Download using yfinance with parallel threads
         try:
             df_pandas = yf.download(
                 symbols, 
@@ -86,25 +129,40 @@ class YahooAdapter:
                     print(f"Error processing {sym}: {e}")
         
         if not frames:
+            print("No valid data frames collected")
             return pl.LazyFrame({})
-        
-        if not frames:
-            return pl.LazyFrame({})
-            
+
         # Concat all Polars DataFrames
         df_pl = pl.concat(frames)
 
-        # Rename columns to match Schema (case insensitive check)
+        # Check if dataframe is empty
+        if df_pl.height == 0:
+            print("Concatenated dataframe is empty")
+            return pl.LazyFrame({})
+
+        # Rename columns to match Schema (check if columns exist first)
         # Yahoo: Date, Open, High, Low, Close, Volume
-        
-        df_pl = df_pl.rename({
-            "Date": "timestamp",
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume"
-        })
+        current_columns = df_pl.columns
+
+        rename_map = {}
+        if "Date" in current_columns:
+            rename_map["Date"] = "timestamp"
+        if "Open" in current_columns:
+            rename_map["Open"] = "open"
+        if "High" in current_columns:
+            rename_map["High"] = "high"
+        if "Low" in current_columns:
+            rename_map["Low"] = "low"
+        if "Close" in current_columns:
+            rename_map["Close"] = "close"
+        if "Volume" in current_columns:
+            rename_map["Volume"] = "volume"
+
+        if rename_map:
+            df_pl = df_pl.rename(rename_map)
+        else:
+            print(f"Warning: No standard Yahoo columns found. Available: {current_columns}")
+            return pl.LazyFrame({})
 
         # Feature Engineering for missing columns
         # VWAP approx = (High + Low + Close) / 3
@@ -133,5 +191,8 @@ class YahooAdapter:
         
         # Sort
         df_pl = df_pl.sort(["symbol", "timestamp"])
+
+        # Save to cache
+        self._save_to_cache(df_pl, cache_path)
 
         return df_pl.lazy()

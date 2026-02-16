@@ -16,22 +16,60 @@ class BacktestEngine:
     def __init__(self, initial_capital: float = 100000.0, data_source: str = 'yahoo'):
         self.initial_capital = initial_capital
         self.data_source = data_source
-        
+
         if data_source == 'alpaca':
             from ancser_quant.data.alpaca_adapter import AlpacaAdapter
             self.adapter = AlpacaAdapter()
+            self.fallback_adapter = None
             print("Using Alpaca Data Source")
+        elif data_source == 'mix':
+            from ancser_quant.data.alpaca_adapter import AlpacaAdapter
+            self.adapter = AlpacaAdapter()
+            self.fallback_adapter = YahooAdapter()
+            print("Using Mix Data Source (Alpaca + Yahoo fallback)")
         else:
             self.adapter = YahooAdapter()
+            self.fallback_adapter = None
             print("Using Yahoo Finance Data Source")
 
     def fetch_and_prepare_data(self, symbols: List[str], start_date: str, end_date: str) -> pd.DataFrame:
-        """Fetch data and compute all factors once."""
+        """Fetch data and compute all factors once. Uses fallback if in mix mode."""
         print(f"Fetching data for {len(symbols)} symbols using {self.data_source}...")
+
+        # Fetch from primary adapter
         schema_df = self.adapter.fetch_history(symbols, start_date, end_date).collect()
-        
+
+        # If in mix mode and primary data is empty or incomplete, try fallback
+        if self.fallback_adapter is not None:
+            if schema_df.is_empty():
+                print("Primary source returned no data, trying fallback (Yahoo)...")
+                try:
+                    schema_df = self.fallback_adapter.fetch_history(symbols, start_date, end_date).collect()
+                    if not schema_df.is_empty():
+                        print(f"✓ Yahoo fallback provided data for {len(symbols)} symbols")
+                except Exception as e:
+                    print(f"⚠ Yahoo fallback failed: {e}")
+            else:
+                # Check for missing symbols
+                fetched_symbols = schema_df['symbol'].unique().to_list()
+                missing_symbols = [s for s in symbols if s not in fetched_symbols]
+
+                if missing_symbols:
+                    print(f"Primary source missing {len(missing_symbols)} symbols: {missing_symbols[:5]}...")
+                    try:
+                        fallback_df = self.fallback_adapter.fetch_history(missing_symbols, start_date, end_date).collect()
+
+                        if not fallback_df.is_empty():
+                            # Combine data
+                            schema_df = pl.concat([schema_df, fallback_df])
+                            print(f"✓ Added {len(missing_symbols)} symbols from Yahoo")
+                        else:
+                            print(f"⚠ Yahoo fallback returned no data for missing symbols")
+                    except Exception as e:
+                        print(f"⚠ Yahoo fallback failed: {e}")
+
         if schema_df.is_empty():
-            print("No data found.")
+            print("No data found from any source.")
             return pd.DataFrame() # Empty
 
         # 2. Compute Factors (Lazy)
@@ -68,7 +106,8 @@ class BacktestEngine:
             'Skew': 'factor_skew',
             'Microstructure': 'factor_amihud',
             'Alpha 101': 'factor_alpha006',
-            'Volatility': 'factor_ivol'
+            'Volatility': 'factor_ivol',
+            'Drift-Reversion': 'factor_rsi_filtered'
         }
         
         # Filter valid factors
@@ -121,7 +160,7 @@ class BacktestEngine:
                 
                 # Directionality
                 ascending = True 
-                if f in ['Reversion', 'Volatility', 'Microstructure']: 
+                if f in ['Reversion', 'Volatility', 'Microstructure', 'Drift-Reversion']: 
                     ascending = False 
                     
                 rank = today_df[col].rank(ascending=ascending, pct=True)

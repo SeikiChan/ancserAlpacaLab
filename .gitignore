@@ -181,3 +181,11 @@ cython_debug/
 .cursorindexingignore
 /data_cache
 /logs/backtest
+allcombo.csv
+CHANGELOG_2026-02-15.md
+MIGRATION_GUIDE.md
+REFACTORING_PLAN.md
+scripts/debug_benchmark.py
+/config
+/config
+config/live_strategy.json

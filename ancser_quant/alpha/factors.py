@@ -127,6 +127,36 @@ def compute_all_factors(df: pl.LazyFrame) -> pl.LazyFrame:
         alpha_006().alias("factor_alpha006"),
         alpha_012().alias("factor_alpha012")
     ])
+
+    # --- Drift Regime Logic (Singha 2025) ---
+    # 1. Calculate positive day ratio (window=63)
+    # 2. IF ratio > 0.60 THEN Regim=1 ELSE Regime=0
+    
+    df = df.with_columns([
+        (pl.col("returns") > 0).cast(pl.Int32).alias("is_positive_day")
+    ])
+    
+    df = df.with_columns([
+        (pl.col("is_positive_day")
+         .rolling_sum(window_size=63)
+         .over("symbol") / 63).alias("positive_day_ratio")
+    ])
+    
+    df = df.with_columns([
+        (pl.col("positive_day_ratio") > 0.60).alias("in_drift_regime") 
+    ])
+    
+    # Create Conditional Factors
+    # FIXED: Use Reversion ONLY when NOT in drift regime
+    # Theory: Avoid mean-reversion when stock is in strong uptrend (drift regime)
+    # When in_drift_regime: Set to RSI median (50) to neutralize the factor
+    # When NOT in_drift_regime: Use actual RSI for reversion signal
+    df = df.with_columns([
+        pl.when(~pl.col("in_drift_regime"))  # 非drift regime时
+        .then(pl.col("factor_rsi"))          # 使用实际RSI反转信号
+        .otherwise(50.0)                     # drift regime时使用中性值（不参与选股）
+        .alias("factor_rsi_filtered")
+    ])
     
     # Cross-sectional factors (needs window function over date)
     # Note: Polars LazyFrame execution order matters. 
