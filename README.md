@@ -7,11 +7,9 @@
 
 **Quantitative Trading System**
 
-<<<<<<< HEAD
-[中文版本](#中文版本) | [English Version](#english-version)
-=======
 **量化交易系統**
->>>>>>> 5e0200254be02d82caab601864d8fe25b54341fd
+
+[中文版本](#中文版本) | [English Version](#english-version)
 
 ---
 
@@ -19,8 +17,13 @@
 
 ## Introduction
 
-<<<<<<< HEAD
-**ancserAlpacaLab** represents a complete architectural overhaul of the legacy system. It separates "Research (Brain)" from "Execution (Body)" and leverages **Polars** for lightning-fast data processing (10-50x faster than Pandas). The frontend is built with **Streamlit**, providing a modern, interactive dashboard for monitoring strategies and factors.
+**ancserAlpacaLab** - Factors / Backtesting / Strategy / Execution
+
+Automated trading using Alpaca platform. Requires daily computer setup to run `daily_run.bat` script for order execution. Includes factor backtesting (not optimized) and order execution.
+
+Built with **Polars** high-performance data processing architecture (10-50x faster than Pandas) and **Streamlit** interactive dashboard.
+
+Developed under supervision by Google Antigravity / Claude Code / ancser.
 
 ---
 
@@ -337,13 +340,14 @@ This software is for educational and research purposes only. Quantitative tradin
 
 ## 簡介
 
-**ancserAlpacaLab** 是對舊有系統的全面重構。它將「研究（大腦）」與「執行（手腳）」完全分離，並利用 **Polars** 進行極速數據處理（比 Pandas 快 10-50 倍）。前端採用 **Streamlit** 構建，提供現代化的交互式儀表板，用於監控策略和因子表現。
-
-=======
 **ancserAlpacaLab** 因子/回測/策略/執行
-使用Alpaca平臺自動交易，需要每天設置電腦開啓daily_run.bat脚本下單。包含因子回測（未最佳化）、訂單執行。
-由Google Antigravity / Claude Code / ancser監督聯合開發。
->>>>>>> 5e0200254be02d82caab601864d8fe25b54341fd
+
+使用 Alpaca 平臺自動交易，需要每天設置電腦開啓 `daily_run.bat` 脚本下單。包含因子回測（未最佳化）、訂單執行。
+
+採用 **Polars** 高性能數據處理架構（比 Pandas 快 10-50 倍）與 **Streamlit** 交互式儀表板。
+
+由 Google Antigravity / Claude Code / ancser 監督聯合開發。
+
 ---
 
 ## 核心功能
