@@ -5,17 +5,15 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-red)](https://streamlit.io/)
 [![Alpaca](https://img.shields.io/badge/Alpaca-Trading-yellow)](https://alpaca.markets/)
 
-**High-Performance Quantitative Trading System (Institutional Grade)**
+**Quantitative Trading System**
 
-**高性能量化交易系統（機構級架構）**
+**量化交易系統**
 
 ---
 
 ## Introduction / 簡介
 
-**ancserAlpacaLab** represents a complete architectural overhaul of the legacy system. It separates "Research (Brain)" from "Execution (Body)" and leverages **Polars** for lightning-fast data processing (10-50x faster than Pandas). The frontend is built with **Streamlit**, providing a modern, interactive dashboard for monitoring strategies and factors.
-
-**ancserAlpacaLab** 是對舊有系統的全面重構。它將「研究（大腦）」與「執行（手腳）」完全分離，並利用 **Polars** 進行極速數據處理（比 Pandas 快 10-50 倍）。前端採用 **Streamlit** 構建，提供現代化的交互式儀表板，用於監控策略和因子表現。
+**ancserAlpacaLab** 因子/回測/策略/執行
 
 ---
 
