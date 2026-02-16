@@ -21,7 +21,7 @@
 
 Automated trading using Alpaca platform. Requires daily computer setup to run `daily_run.bat` script for order execution. Includes factor backtesting (not optimized) and order execution.
 
-Built with **Polars** high-performance data processing architecture (10-50x faster than Pandas) and **Streamlit** interactive dashboard.
+Built with **Polars** high-performance data processing architecture and **Streamlit** interactive dashboard.
 
 Developed under supervision by Google Antigravity / Claude Code / ancser.
 
@@ -29,17 +29,7 @@ Developed under supervision by Google Antigravity / Claude Code / ancser.
 
 ## Key Features
 
-### 1. High-Performance Data Engine
-
-**Polars Core**: Rust-based DataFrame library for memory efficiency and speed.
-
-**Strict Schema**: `schema.py` enforces data types (`Float32`, `Categorical`) to prevent data corruption.
-
-**Unified Adapters**: Seamless data ingestion from **Yahoo Finance** (2015+ historical data) and **Alpaca** (2021+ real-time execution).
-
-**Data Caching**: Automatic Parquet caching provides 24x speedup on repeated queries (0.73s → 0.03s).
-
-### 2. Alpha Factor Library
+### 1. Alpha Factor Library
 
 **Cross-Sectional Focus**: Factors rank stocks against their peers rather than just time-series analysis.
 
@@ -82,7 +72,7 @@ Prevents over-concentration with configurable bounds (min 5%, max 60% per factor
 
 Tracks IC history for performance analysis and debugging.
 
-### 3. Risk Management
+### 2. Risk Management
 
 **Volatility Targeting (Constant Risk)**: Automatically adjusts portfolio leverage based on realized volatility (e.g., Target 20% Vol).
 
@@ -92,7 +82,7 @@ Tracks IC history for performance analysis and debugging.
 
 **Idempotent OMS**: Target-based execution ensures safety even if scripts are re-run.
 
-### 4. Interactive Dashboard
+### 3. Interactive Dashboard
 
 **Streamlit App**: Real-time visualization of Equity Curve, P&L, Positions, and Performance Metrics.
 
@@ -271,58 +261,10 @@ ancserAlpacaLab/
 
 ---
 
-## Recent Improvements
-
-**Fixed Drift-Reversion Factor Logic**: Now correctly applies reversion only in non-drift regimes, reducing max drawdown by ~2.77%
-
-**Enhanced MWU Engine**: Added weight bounds (min/max) to prevent extreme factor allocations and IC history tracking
-
-**Improved Dashboard Charts**: TradingView-like equity curves with proper range limits, date selectors, and zoom controls
-
-**Fixed Benchmark Display**: Resolved SPY/QQQ/GLD alignment issues in backtest charts
-
-**Live Strategy Monitor**: Dashboard now auto-loads and displays current trading logic from saved configurations
-
-**Better Project Organization**: Scripts moved to dedicated folder, clearer separation of concerns
-
-**Automatic Error Logging**: All dashboard errors and warnings automatically saved to `logs/dashboard_YYYY-MM-DD.log`
-
-**Factor Presets with Visual Feedback**: Click preset buttons to quick-load top combinations, active preset highlighted
-
-**Year-Based Date Selection**: Simplified date selection with auto-generated start/end dates
-
-**Data Caching System**: Parquet file caching provides 24x speedup on repeated queries
-
-**Compact 5-Column Layout**: Initial Capital, Date Range, Data Source, Universe, and Risk Management in one row
-
-**Save Config & Force Execute Side-by-Side**: Clear separation of configuration saving and strategy execution
-
----
-
-## Performance Highlights
-
-**Top Factor Combination** (from All Combo analysis):
-- **Momentum + Reversion + Skew + Drift-Reversion**: Calmar Ratio 2.12
-
-**Data Processing Speed**:
-- Yahoo Adapter with cache: 0.03s (vs 0.73s without cache, 24x faster)
-- Polars engine: 10-50x faster than Pandas for large datasets
-
----
-
 ## Troubleshooting
 
 **Issue**: Dashboard shows "No API keys" warning
 **Solution**: Create `.env` file with Alpaca credentials or use Yahoo data source
-
-**Issue**: Backtest returns empty data
-**Solution**: Check date range (Yahoo: 2015+, Alpaca: 2021+) and ensure tickers are valid
-
-**Issue**: Preset buttons not updating factors
-**Solution**: Ensure you're on the Backtest page and click the preset button, then check the multiselect
-
-**Issue**: Force Execute button not working
-**Solution**: Check logs in `logs/` directory for detailed error messages
 
 ---
 
@@ -344,7 +286,7 @@ This software is for educational and research purposes only. Quantitative tradin
 
 使用 Alpaca 平臺自動交易，需要每天設置電腦開啓 `daily_run.bat` 脚本下單。包含因子回測（未最佳化）、訂單執行。
 
-採用 **Polars** 高性能數據處理架構（比 Pandas 快 10-50 倍）與 **Streamlit** 交互式儀表板。
+採用 **Polars** 高性能數據處理架構與 **Streamlit** 交互式儀表板。
 
 由 Google Antigravity / Claude Code / ancser 監督聯合開發。
 
@@ -352,17 +294,7 @@ This software is for educational and research purposes only. Quantitative tradin
 
 ## 核心功能
 
-### 1. 高性能數據引擎
-
-**Polars 核心引擎**：基於 Rust 的數據框架庫，提供記憶體效率與極速運算。
-
-**嚴格數據架構**：`schema.py` 強制執行數據類型（`Float32`、`Categorical`）以防止數據損壞。
-
-**統一適配器**：無縫對接 **Yahoo Finance**（2015+ 歷史數據）與 **Alpaca**（2021+ 實時執行）。
-
-**數據緩存**：自動 Parquet 緩存使重複查詢速度提升 24 倍（0.73 秒 → 0.03 秒）。
-
-### 2. Alpha 因子庫
+### 1. Alpha 因子庫
 
 **橫截面分析**：因子對股票進行同期排名，而非僅時間序列分析。
 
@@ -405,7 +337,7 @@ This software is for educational and research purposes only. Quantitative tradin
 
 追蹤 IC 歷史記錄以進行性能分析與調試。
 
-### 3. 風險管理
+### 2. 風險管理
 
 **波動率目標（恆定風險）**：根據實現波動率自動調整組合槓桿（例如目標 20% 波動率）。
 
@@ -415,7 +347,7 @@ This software is for educational and research purposes only. Quantitative tradin
 
 **冪等訂單管理系統**：基於目標的執行確保即使重複運行腳本也安全。
 
-### 4. 交互式儀表板
+### 3. 交互式儀表板
 
 **Streamlit 應用**：實時可視化權益曲線、損益、持倉與績效指標。
 
@@ -594,58 +526,10 @@ ancserAlpacaLab/
 
 ---
 
-## 最新改進
-
-**修復 Drift-Reversion 因子邏輯**：現在正確地僅在非漂移狀態下應用回歸，最大回撤降低約 2.77%
-
-**增強 MWU 引擎**：添加權重邊界（最小/最大）以防止極端因子配置，並追蹤 IC 歷史
-
-**改進儀表板圖表**：類 TradingView 權益曲線，具備適當範圍限制、日期選擇器與縮放控制
-
-**修復基準顯示**：解決回測圖表中 SPY/QQQ/GLD 對齊問題
-
-**實時策略監控**：儀表板現在自動加載並顯示來自保存配置的當前交易邏輯
-
-**更好的項目組織**：腳本移至專用文件夾，更清晰的關注點分離
-
-**自動錯誤日誌**：所有儀表板錯誤與警告自動保存至 `logs/dashboard_YYYY-MM-DD.log`
-
-**帶視覺反饋的因子預設**：點擊預設按鈕快速加載頂級組合，啟用預設高亮顯示
-
-**基於年份的日期選擇**：簡化日期選擇，自動生成起始/結束日期
-
-**數據緩存系統**：Parquet 文件緩存使重複查詢速度提升 24 倍
-
-**緊湊 5 列佈局**：初始資金、日期範圍、數據來源、股票池與風險管理在一行
-
-**並列保存配置與強制執行**：配置保存與策略執行清晰分離
-
----
-
-## 性能亮點
-
-**頂級因子組合**（來自全組合分析）：
-- **動量 + 均值回歸 + 偏度 + 漂移感知回歸**：Calmar 比率 2.12
-
-**數據處理速度**：
-- 帶緩存的 Yahoo 適配器：0.03 秒（vs 無緩存 0.73 秒，快 24 倍）
-- Polars 引擎：大數據集比 Pandas 快 10-50 倍
-
----
-
 ## 故障排除
 
 **問題**：儀表板顯示「無 API 密鑰」警告
 **解決方案**：創建包含 Alpaca 憑證的 `.env` 檔案或使用 Yahoo 數據來源
-
-**問題**：回測返回空數據
-**解決方案**：檢查日期範圍（Yahoo：2015+，Alpaca：2021+）並確保股票代碼有效
-
-**問題**：預設按鈕未更新因子
-**解決方案**：確保您在回測頁面並點擊預設按鈕，然後檢查多選框
-
-**問題**：強制執行按鈕不工作
-**解決方案**：檢查 `logs/` 目錄中的日誌以獲取詳細錯誤消息
 
 ---
 
