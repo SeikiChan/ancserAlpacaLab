@@ -8,7 +8,7 @@ import pandas as pd
 from dotenv import load_dotenv
 import os
 
-load_dotenv() # Force load
+load_dotenv(override=True)  # Prefer project .env over stale system env vars
 from datetime import datetime
 from typing import List, Dict
 from .schema import MARKET_DATA_SCHEMA
