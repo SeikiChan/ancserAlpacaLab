@@ -5,6 +5,9 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-red)](https://streamlit.io/)
 [![Alpaca](https://img.shields.io/badge/Alpaca-Trading-yellow)](https://alpaca.markets/)
 
+**Quantitative Trading System**
+
+**量化交易系統**
 
 [中文版本](#中文版本) | [English Version](#english-version)
 
