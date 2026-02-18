@@ -1,8 +1,5 @@
 import logging
-<<<<<<< Updated upstream
-=======
 import time
->>>>>>> Stashed changes
 import pandas as pd
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -46,7 +43,8 @@ class TitanEventLoop:
         Runs every hour (during trading hours).
         Responsible for initiating the Factor Pipeline and Rebalancing Logic.
         """
-        logger.info("Checking for rebalance opportunity...")
+        logger.info("")
+        logger.info(">> STEP 1: Loading Strategy Configuration")
         
         # 1. Load Live Strategy Config
         import json
@@ -60,9 +58,12 @@ class TitanEventLoop:
             with open(config_path, 'r') as f:
                 strategy_config = json.load(f)
             
-            logger.info(f"Loaded Strategy Config: {strategy_config}")
+            logger.info(f"   ✓ Loaded {config_path}")
             universe = strategy_config.get('universe', [])
             factors = strategy_config.get('active_factors', [])
+            
+            logger.info(f"   • Universe: {len(universe)} stocks")
+            logger.info(f"   • Active Factors: {factors}")
             
             if not universe or not factors:
                 logger.warning("Universe or Factors empty. Skipping.")
@@ -74,8 +75,14 @@ class TitanEventLoop:
             vol_target = strategy_config.get('vol_target', 0.20)
             leverage_cap = strategy_config.get('leverage', 1.0)
             
+            logger.info("")
+            logger.info(">> STEP 2: Volatility Targeting")
+            
             if use_vol_target:
-                logger.info(f"Volatility Targeting Enabled. Target: {vol_target:.1%}. Calculating current market vol...")
+                logger.info(f"   • Vol Targeting: ENABLED")
+                logger.info(f"   • Target Vol: {vol_target:.1%}")
+                logger.info(f"   • Max Leverage: {leverage_cap:.1f}x")
+                logger.info(f"   • Calculating current market volatility...")
                 try:
                     # Fetch 30 days of history for the universe to estimate recent volatility
                     # Using Universe Equal Weight Volatility as Proxy for Portfolio Volatility (Robustness)
@@ -124,11 +131,14 @@ class TitanEventLoop:
             from ancser_quant.execution.strategy import LiveStrategy
             strat = LiveStrategy()
             
+            logger.info("")
+            logger.info(">> STEP 3: Factor Calculation & Portfolio Construction")
+            
             # Use the loaded config
             res = strat.calculate_targets(strategy_config)
             
             if "error" in res:
-                logger.error(f"Strategy Calculation Error: {res['error']}")
+                logger.error(f"   ✗ Strategy Calculation Error: {res['error']}")
                 return
 
             # Extract Results
@@ -138,18 +148,26 @@ class TitanEventLoop:
             # Update target scalar from LiveStrategy result (it handles vol targeting internally now)
             final_scalar = vol_metrics.get('final_scalar', 1.0)
             
-            logger.info(f"Rebalance Logic Executed. Final Target Exposure Scalar: {final_scalar:.2f}x")
+            logger.info(f"   ✓ Factor Calculation Complete")
+            logger.info(f"   • Target Weights Generated: {len(target_weights)} assets")
+            logger.info(f"   • Exposure Scalar: {final_scalar:.2f}x")
             
             if not target_weights:
-                logger.warning("No target weights generated. Portfolio may be empty.")
+                logger.warning("   ⚠ No target weights generated. Portfolio would be empty.")
+                logger.warning("   Check factor calculation or symbol data availability.")
+                return
             else:
-                logger.info(f"Generated Targets for {len(target_weights)} assets.")
+                for sym, weight in list(target_weights.items())[:5]:
+                    logger.info(f"     - {sym}: {weight:.2%}")
+                if len(target_weights) > 5:
+                    logger.info(f"     ... and {len(target_weights) - 5} more")
                 
             # 4. Order Management System (OMS)
             from ancser_quant.execution.oms import OrderManagementSystem
             oms = OrderManagementSystem()
             
-            logger.info("Executing Rebalance Orders...")
+            logger.info("")
+            logger.info(">> STEP 4: Order Execution")
             oms.generate_and_execute_orders(target_weights)
             
             logger.info("Rebalance Cycle Completed.")
@@ -158,8 +176,7 @@ class TitanEventLoop:
             logger.error(f"Rebalance Failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            
-        pass 
+
 
     def start(self):
         """Start the scheduler loop."""
@@ -203,16 +220,32 @@ class TitanEventLoop:
 def run_once(force: bool = False):
     """Run the rebalance logic once and exit."""
     loop = TitanEventLoop()
-    logger.info("--- Starting Daily Batch Execution ---")
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("DAILY REBALANCE EXECUTION STARTED")
+    logger.info("=" * 70)
     
     if not force:
         if not loop.check_market_open():
             logger.warning("Market is Closed. Use --force to run anyway. Exiting.")
+            logger.info("=" * 70)
             return
 
     logger.info("Running Rebalance Logic...")
-    loop.rebalance_check()
-    logger.info("--- Daily Batch Execution Completed ---")
+    try:
+        loop.rebalance_check()
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("DAILY REBALANCE COMPLETED SUCCESSFULLY")
+        logger.info("=" * 70)
+    except Exception as e:
+        logger.error("")
+        logger.error("=" * 70)
+        logger.error("DAILY REBALANCE FAILED")
+        logger.error("=" * 70)
+        logger.error(f"Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 if __name__ == "__main__":
     import argparse

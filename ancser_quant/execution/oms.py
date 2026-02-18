@@ -41,6 +41,7 @@ class OrderManagementSystem:
         
         # 2. Calculate Orders
         orders = []
+        skipped_trades = {}
         
         # Determine all involved symbols (Current + Target)
         all_symbols = set(current_holdings.keys()) | set(target_weights.keys())
@@ -52,8 +53,14 @@ class OrderManagementSystem:
             
             diff_val = target_val - current_val
             
-            # Threshold: Ignore trades < $10 to avoid noise/fees
-            if abs(diff_val) < 10.0:
+            # Threshold logic: 
+            # - SELL orders for stocks NOT in target (target_pct=0): Force full liquidation, no minimum
+            # - BUY/ADJUST orders: Minimum $0.01 to avoid noise
+            MIN_TRADE_SIZE = 0.01
+            is_liquidation = (target_pct == 0.0 and current_val > 0.0)
+            
+            if abs(diff_val) < MIN_TRADE_SIZE and not is_liquidation:
+                skipped_trades[sym] = f"${abs(diff_val):.7f} (below ${MIN_TRADE_SIZE} threshold)"
                 continue
                 
             # Estimate Price to calculate Qty
@@ -90,16 +97,21 @@ class OrderManagementSystem:
 
             # Alpaca supports Notional (dollar amount) orders for most assets!
             # We can just submit "Buy $500 of AAPL" or "Sell $200 of MSFT".
-            # This avoids price/qty calculation headaches.
+            # For SELL orders, apply 0.01% safety discount to avoid precision loss issues
             
             side = 'buy' if diff_val > 0 else 'sell'
             qty_val = abs(diff_val)
+            
+            # Apply precision safety discount for SELL orders (Alpaca notional precision issue)
+            if side == 'sell':
+                qty_val = qty_val * 0.9999  # 0.01% safety margin
             
             orders.append({
                 'symbol': sym,
                 'side': side,
                 'notional': qty_val,
-                'type': 'market' # Market order for now
+                'type': 'market',  # Market order for now
+                'is_liquidation': is_liquidation  # Flag for forced liquidation
             })
 
         # 3. Execution (Sell First, Then Buy)
@@ -108,13 +120,28 @@ class OrderManagementSystem:
         buy_orders = [o for o in orders if o['side'] == 'buy']
         
         executed_orders = []
+        failed_orders = []
         
-        logger.info(f"Generated {len(sell_orders)} SELL orders and {len(buy_orders)} BUY orders.")
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info(f"ORDER EXECUTION SUMMARY")
+        logger.info("=" * 60)
+        logger.info(f"Total Sell Orders: {len(sell_orders)}")
+        logger.info(f"Total Buy Orders: {len(buy_orders)}")
+        logger.info(f"Skipped Trades:   {len(skipped_trades)}")
+        
+        if skipped_trades:
+            logger.info("")
+            logger.info("Skipped Trades (Too Small):")
+            for sym, reason in skipped_trades.items():
+                logger.info(f"  - {sym}: {reason}")
+        logger.info("")
         
         # Execute Sells
         for order in sell_orders:
             try:
-                logger.info(f"Submitting SELL: {order['symbol']} - ${order['notional']:.2f}")
+                liquidation_tag = " [LIQUIDATE]" if order.get('is_liquidation') else ""
+                logger.info(f"[SELL] {order['symbol']:6} ${order['notional']:>10.2f}{liquidation_tag}")
                 self.alpaca.submit_order(
                     symbol=order['symbol'],
                     qty=0, # ignored if notional
@@ -122,14 +149,16 @@ class OrderManagementSystem:
                     notional=order['notional']
                 )
                 executed_orders.append(order)
+                logger.info(f"       ✓ SUCCESS")
             except Exception as e:
-                logger.error(f"Failed to execute SELL {order['symbol']}: {e}")
+                failed_orders.append((order, str(e)))
+                logger.error(f"       ✗ FAILED: {e}")
 
         # Execute Buys
         for order in buy_orders:
             try:
                 # Check buying power? Alpaca handles it.
-                logger.info(f"Submitting BUY: {order['symbol']} - ${order['notional']:.2f}")
+                logger.info(f"[BUY]  {order['symbol']:6} ${order['notional']:>10.2f}")
                 self.alpaca.submit_order(
                     symbol=order['symbol'],
                     qty=0, 
@@ -137,7 +166,23 @@ class OrderManagementSystem:
                     notional=order['notional']
                 )
                 executed_orders.append(order)
+                logger.info(f"       ✓ SUCCESS")
             except Exception as e:
-                logger.error(f"Failed to execute BUY {order['symbol']}: {e}")
-                
+                failed_orders.append((order, str(e)))
+                logger.error(f"       ✗ FAILED: {e}")
+        
+        # Final Summary
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info(f"EXECUTION RESULT:")
+        logger.info(f"  Orders Submitted: {len(executed_orders)}")
+        logger.info(f"  Orders Failed:    {len(failed_orders)}")
+        logger.info("=" * 60)
+        
+        if len(executed_orders) == 0:
+            logger.warning("⚠ NO ORDERS EXECUTED IN THIS REBALANCE!")
+        else:
+            logger.info(f"✓ {len(executed_orders)} orders submitted successfully")
+        logger.info("")
+        
         return executed_orders
